@@ -81,3 +81,10 @@ Usar dos cuentas ficticias, A y B, y registrar resultados sin incluir contraseñ
 Las pruebas de validación, estado y emuladores son la evidencia automatizada.
 La verificación contra el Firebase remoto requiere acceso administrativo y dos
 cuentas de prueba; no se da por realizada por el mero hecho de tener el JSON local.
+
+### Resultado de la verificación del ticket #9
+
+El 8 de noviembre de 2026 se desplegaron las reglas del perfil y la política de
+contraseñas, y pasaron 19 comprobaciones contra Firebase real con dos cuentas
+ficticias, eliminadas al terminar. Véanse las
+[evidencias y límites de la verificación](docs/verificacion/acceso-privado.md).
