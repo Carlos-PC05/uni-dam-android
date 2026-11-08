@@ -4,43 +4,17 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import com.example.aplicacion.ui.navigation.VestaApp
 import com.example.aplicacion.ui.theme.AplicacionTheme
+import dagger.hilt.android.AndroidEntryPoint
+
+/** Actividad única que aloja la navegación Compose y recibe las dependencias Hilt. */
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    /** Instala el tema y la raíz de acceso sin realizar consultas desde la actividad. */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent {
-            AplicacionTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Carlos, Pablovi, Brechas, Hoyos e Isra!!",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    AplicacionTheme {
-        Greeting("Android")
+        setContent { AplicacionTheme { VestaApp() } }
     }
 }
