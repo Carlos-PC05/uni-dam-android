@@ -66,7 +66,7 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
         perform(AccessStatus.SIGNED_OUT) {
             repository.register(form.email.trim(), password)
             _state.update { it.copy(access = AccessStatus.INCOMPLETE) }
-            val profile = repository.saveProfile(form.fullName)
+            val profile = withTimeout(30_000) { repository.saveProfile(form.fullName) }
             _state.value = AuthUiState(access = AccessStatus.READY, profile = profile)
         }
     }
@@ -93,7 +93,7 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
             return
         }
         perform(AccessStatus.INCOMPLETE) {
-            val profile = repository.saveProfile(name)
+            val profile = withTimeout(30_000) { repository.saveProfile(name) }
             _state.value = AuthUiState(access = AccessStatus.READY, profile = profile)
         }
     }
@@ -107,19 +107,20 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
 
     /** Distingue documento inexistente de lectura fallida; esta última se propaga. */
     private suspend fun loadProfile() {
-        val profile = repository.loadProfile()
+        val profile = withTimeout(30_000) { repository.loadProfile() }
         _state.update { it.copy(
             access = if (profile == null) AccessStatus.INCOMPLETE else AccessStatus.READY,
             profile = profile,
         ) }
     }
 
-    /** Serializa acciones, limita la espera y conserva el formulario ante errores remotos. */
+    /** Serializa acciones y conserva el formulario; solo el perfil admite una espera limitada. */
     private fun perform(failureAccess: AccessStatus, action: suspend () -> Unit) {
         _state.update { it.copy(busy = true, message = null, fieldErrors = emptyMap()) }
         viewModelScope.launch {
             try {
-                withTimeout(30_000) { action() }
+                // Cancelar await no cancela el alta del SDK: no liberar el envío antes de su respuesta.
+                action()
             } catch (timeout: TimeoutCancellationException) {
                 showFailure(failureAccess, "No se ha podido confirmar la operación. Comprueba la conexión y reintenta.")
             } catch (cancelled: CancellationException) {

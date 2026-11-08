@@ -129,6 +129,23 @@ class AuthViewModelTest {
         assertEquals(AccessStatus.READY, vm.state.value.access)
     }
 
+    /** El SDK puede seguir procesando el alta: un reloj local no debe permitir duplicarla. */
+    @Test fun slowAuthenticationRemainsSerialized() = runTest {
+        val remote = FakeAuthRepository().apply { gate = CompletableDeferred() }
+        val vm = AuthViewModel(remote)
+        vm.updateName("Alicia"); vm.updateEmail("alice@example.com")
+        vm.register("abcdefghij1@", "abcdefghij1@")
+        runCurrent()
+        advanceTimeBy(31_000)
+        runCurrent()
+        assertTrue(vm.state.value.busy)
+        vm.register("abcdefghij1@", "abcdefghij1@")
+        remote.gate!!.complete(Unit)
+        runCurrent()
+        assertEquals(1, remote.registrations)
+        assertEquals(AccessStatus.READY, vm.state.value.access)
+    }
+
     /** Cerrar sesión retira el perfil y los campos privados antes de otra cuenta. */
     @Test fun signOutClearsPrivateState() = runTest {
         val remote = FakeAuthRepository().apply {
