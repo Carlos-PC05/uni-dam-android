@@ -2,14 +2,18 @@
 
 ## Estado actual
 
-El formulario añade movimientos. El resumen y el listado observan el mismo `StateFlow`; el listado permite eliminarlos y muestra un mensaje cuando queda vacío. El nivel de estado vacío se completó en el commit `5c15db6`.
+El formulario permite añadir y editar movimientos. El resumen y el listado observan el mismo `StateFlow`; el listado permite eliminar movimientos y muestra un mensaje cuando queda vacío. La edición se completó en el commit `742859b`.
 
-## Siguiente paso: editar un movimiento
+## Siguiente paso: filtrar por categoría
 
-Aprenderás a reemplazar un elemento de una lista sin crear un movimiento adicional. El repositorio publicará una lista nueva y el `StateFlow` actualizará el listado y el resumen.
+Aprenderás a derivar una lista visible sin modificar la lista original del repositorio. El filtro solo cambia qué filas muestra la pantalla.
 
-1. Añade una acción «Editar» en cada fila.
-2. Abre el formulario con el importe y la categoría actuales.
-3. Al guardar, actualiza ese movimiento en el repositorio y conserva el flujo de alta actual.
+1. Añade un selector de categoría, incluida una opción para ver todas.
+2. Conserva la categoría elegida como estado de la pantalla.
+3. Muestra solo los movimientos que coinciden; al elegir «Todas», muestra la lista completa.
 
-**Comprobación:** añade 25 € en Ocio, edítalo a 30 € en Vivienda y guarda. Debe seguir habiendo cinco filas; Ocio baja 25 €, Vivienda sube 30 € y el resumen refleja el cambio neto de 5 €.
+**Comprobación:** añade 25 € en Ocio. Al filtrar por Ocio deben aparecer los dos movimientos de esa categoría; al elegir «Todas», deben aparecer los cinco movimientos.
+
+## Fin de esta etapa
+
+Después del filtro, comprueba en el simulador el flujo completo: añadir, editar, filtrar y eliminar; la lista y el resumen deben reflejar cada cambio. La persistencia después de cerrar la aplicación queda fuera de esta etapa.
