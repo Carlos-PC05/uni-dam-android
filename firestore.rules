@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Solo el propietario puede leer su perfil; el resto de rutas queda denegado.
+    match /usuarios/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['nombreCompleto'])
+        && request.resource.data.nombreCompleto is string
+        && request.resource.data.nombreCompleto.size() >= 1
+        && request.resource.data.nombreCompleto.size() <= 100
+        && request.resource.data.nombreCompleto.matches('.*\\S.*');
+    }
+  }
+}
