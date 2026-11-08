@@ -40,9 +40,9 @@ fun AuthScreen(
             style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(24.dp))
         if (registering) {
-            AuthField("Nombre completo", state.fullName, onNameChange, state.fieldErrors[AuthField.NAME], !state.busy)
+            AuthTextField("Nombre completo", state.fullName, onNameChange, state.fieldErrors[AuthField.NAME], !state.busy)
         }
-        AuthField("Correo electrónico", state.email, onEmailChange, state.fieldErrors[AuthField.EMAIL], !state.busy,
+        AuthTextField("Correo electrónico", state.email, onEmailChange, state.fieldErrors[AuthField.EMAIL], !state.busy,
             keyboardType = KeyboardType.Email)
         PasswordField("Contraseña", password, { password = it }, state.fieldErrors[AuthField.PASSWORD], !state.busy)
         if (registering) {
@@ -88,7 +88,7 @@ fun AuthPanel(title: String, content: @Composable ColumnScope.() -> Unit) {
 
 /** Campo de texto con etiqueta, error asociado y contraste legible sobre el fondo oscuro. */
 @Composable
-private fun AuthField(
+private fun AuthTextField(
     label: String, value: String, onChange: (String) -> Unit, error: String?, enabled: Boolean,
     keyboardType: KeyboardType = KeyboardType.Text,
     transformation: VisualTransformation = VisualTransformation.None,
@@ -121,7 +121,7 @@ private fun AuthField(
 @Composable
 private fun PasswordField(label: String, value: String, onChange: (String) -> Unit, error: String?, enabled: Boolean) {
     var visible by remember { mutableStateOf(false) }
-    AuthField(label, value, onChange, error, enabled, KeyboardType.Password,
+    AuthTextField(label, value, onChange, error, enabled, KeyboardType.Password,
         if (visible) VisualTransformation.None else PasswordVisualTransformation(),
         trailing = {
             TextButton(onClick = { visible = !visible }, enabled = enabled) {
