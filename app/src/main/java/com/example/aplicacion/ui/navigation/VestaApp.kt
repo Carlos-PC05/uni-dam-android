@@ -33,21 +33,42 @@ fun VestaApp(viewModel: AuthViewModel = hiltViewModel()) {
     }
 }
 
-/** Mantiene login y registro separados para retirar contraseñas al abandonar un formulario. */
+/** Separa login/registro y superpone la recuperación sin retirar las credenciales del login. */
 @Composable
 private fun AuthNavigation(state: AuthUiState, viewModel: AuthViewModel) {
     val nav = rememberNavController()
     NavHost(navController = nav, startDestination = Login) {
         composable<Login> {
-            AuthScreen(state, false, viewModel::updateName, viewModel::updateEmail,
+            AuthScreen(
+                state, false, viewModel::updateName, viewModel::updateEmail,
                 onSubmit = { password, _ -> viewModel.signIn(password) },
-                onSwitch = { viewModel.clearErrors(); nav.navigate(Register) { launchSingleTop = true } })
+                onSwitch = {
+                    viewModel.clearErrors()
+                    nav.navigate(Register) { launchSingleTop = true }
+                },
+                onRecovery = viewModel::openRecovery,
+            )
         }
         composable<Register> {
-            AuthScreen(state, true, viewModel::updateName, viewModel::updateEmail,
+            AuthScreen(
+                state, true, viewModel::updateName, viewModel::updateEmail,
                 onSubmit = viewModel::register,
-                onSwitch = { viewModel.clearErrors(); nav.popBackStack() })
+                onSwitch = {
+                    viewModel.clearErrors()
+                    nav.popBackStack()
+                },
+                onRecovery = viewModel::openRecovery,
+            )
         }
+    }
+    state.recovery?.let { recovery ->
+        PasswordRecoveryDialog(
+            state = recovery,
+            busy = state.busy,
+            onEmailChange = viewModel::updateRecoveryEmail,
+            onSubmit = viewModel::recoverPassword,
+            onClose = viewModel::closeRecovery,
+        )
     }
 }
 

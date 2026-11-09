@@ -93,10 +93,9 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                _state.update {
-                    it.copy(recovery = form.copy(error = (error as? AuthFailure)?.message
-                        ?: "No se ha podido solicitar el correo de recuperación. Comprueba la conexión y reintenta."))
-                }
+                val message = (error as? AuthFailure)?.message
+                    ?: "No se ha podido solicitar el correo de recuperación. Comprueba la conexión y reintenta."
+                _state.update { it.copy(recovery = form.copy(error = message, emailError = null)) }
             } finally {
                 _state.update { it.copy(busy = false) }
             }

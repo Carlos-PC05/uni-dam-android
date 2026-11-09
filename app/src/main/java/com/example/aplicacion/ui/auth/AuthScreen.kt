@@ -32,41 +32,135 @@ fun AuthScreen(
     onEmailChange: (String) -> Unit,
     onSubmit: (String, String) -> Unit,
     onSwitch: () -> Unit,
+    onRecovery: () -> Unit,
 ) {
     var password by remember { mutableStateOf("") }
     var confirmation by remember { mutableStateOf("") }
     AuthPanel(if (registering) "Crea tu cuenta" else "Bienvenido") {
-        Text(if (registering) "Empieza a organizar tus finanzas." else "Tus finanzas, en un mismo lugar.",
-            style = MaterialTheme.typography.bodyLarge)
+        Text(
+            if (registering) "Empieza a organizar tus finanzas." else "Tus finanzas, en un mismo lugar.",
+            style = MaterialTheme.typography.bodyLarge,
+        )
         Spacer(Modifier.height(24.dp))
         if (registering) {
-            AuthTextField("Nombre completo", state.fullName, onNameChange, state.fieldErrors[AuthField.NAME], !state.busy)
+            AuthTextField(
+                "Nombre completo", state.fullName, onNameChange,
+                state.fieldErrors[AuthField.NAME], !state.busy,
+            )
         }
-        AuthTextField("Correo electrónico", state.email, onEmailChange, state.fieldErrors[AuthField.EMAIL], !state.busy,
-            keyboardType = KeyboardType.Email)
+        AuthTextField(
+            "Correo electrónico", state.email, onEmailChange,
+            state.fieldErrors[AuthField.EMAIL], !state.busy,
+            keyboardType = KeyboardType.Email,
+        )
         PasswordField("Contraseña", password, { password = it }, state.fieldErrors[AuthField.PASSWORD], !state.busy)
         if (registering) {
-            Text("Mínimo 12 caracteres: letras, números y un símbolo de -_?#@.",
-                style = MaterialTheme.typography.bodySmall)
+            Text(
+                "Mínimo 12 caracteres: letras, números y un símbolo de -_?#@.",
+                style = MaterialTheme.typography.bodySmall,
+            )
             Spacer(Modifier.height(12.dp))
-            PasswordField("Confirmar contraseña", confirmation, { confirmation = it },
-                state.fieldErrors[AuthField.CONFIRMATION], !state.busy)
+            PasswordField(
+                "Confirmar contraseña", confirmation, { confirmation = it },
+                state.fieldErrors[AuthField.CONFIRMATION], !state.busy,
+            )
+        } else {
+            TextButton(
+                onClick = onRecovery,
+                enabled = !state.busy,
+                modifier = Modifier.align(Alignment.End),
+            ) {
+                Text("¿Has olvidado tu contraseña?")
+            }
         }
         AuthError(state.message)
         Spacer(Modifier.height(20.dp))
-        Button(onClick = { onSubmit(password, confirmation) }, enabled = !state.busy,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(14.dp)) {
+        Button(
+            onClick = { onSubmit(password, confirmation) },
+            enabled = !state.busy,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+            shape = RoundedCornerShape(14.dp),
+        ) {
             if (state.busy) {
-                CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+                CircularProgressIndicator(
+                    Modifier.size(20.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp,
+                )
                 Spacer(Modifier.width(12.dp))
             }
             Text(if (state.busy) "Guardando…" else if (registering) "Crear cuenta" else "Iniciar sesión")
         }
         Spacer(Modifier.height(20.dp))
-        TextButton(onClick = onSwitch, enabled = !state.busy, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+        TextButton(
+            onClick = onSwitch,
+            enabled = !state.busy,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        ) {
             Text(if (registering) "¿Ya tienes cuenta? Inicia sesión" else "¿No tienes cuenta? Regístrate")
         }
     }
+}
+
+/** Solicita un correo sin desmontar login; anuncia el resultado y permite corregir o reintentar. */
+@Composable
+fun PasswordRecoveryDialog(
+    state: PasswordRecoveryState,
+    busy: Boolean,
+    onEmailChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    onClose: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { if (!busy) onClose() },
+        containerColor = Mint,
+        titleContentColor = Forest,
+        textContentColor = Forest,
+        title = { Text("Recuperar contraseña") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    "Te enviaremos un enlace para que elijas una nueva contraseña.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(20.dp))
+                AuthTextField(
+                    label = "Correo de recuperación",
+                    value = state.email,
+                    onChange = onEmailChange,
+                    error = state.emailError,
+                    enabled = !busy,
+                    keyboardType = KeyboardType.Email,
+                )
+                AuthError(state.error)
+                if (state.sent) {
+                    Text(
+                        "Te hemos enviado un correo electrónico para que restaures tu contraseña",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (state.sent) {
+                TextButton(onClick = onClose) { Text("Cerrar") }
+            } else {
+                TextButton(onClick = onSubmit, enabled = !busy) {
+                    if (busy) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(if (busy) "Enviando…" else "Enviar correo")
+                }
+            }
+        },
+        dismissButton = {
+            if (!state.sent) {
+                TextButton(onClick = onClose, enabled = !busy) { Text("Cancelar") }
+            }
+        },
+    )
 }
 
 /** Contenedor adaptativo con cabecera oscura y panel redondeado desplazable sobre el teclado. */
