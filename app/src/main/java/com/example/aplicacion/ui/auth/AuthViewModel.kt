@@ -3,6 +3,7 @@ package com.example.aplicacion.ui.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aplicacion.data.auth.AuthRepository
+import com.example.aplicacion.data.auth.AuthFailure
 import com.example.aplicacion.model.UserProfile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -17,6 +18,14 @@ import javax.inject.Inject
 /** Estados de acceso: una sesión sin perfil completo todavía no permite entrar. */
 enum class AccessStatus { CHECKING, SIGNED_OUT, INCOMPLETE, READY, FAILED }
 
+/** Datos del diálogo, independientes del correo y los errores del formulario de login. */
+data class PasswordRecoveryState(
+    val email: String,
+    val emailError: String? = null,
+    val error: String? = null,
+    val sent: Boolean = false,
+)
+
 /** Estado visible sin contraseñas; los secretos solo viven en el formulario y la petición activa. */
 data class AuthUiState(
     val access: AccessStatus = AccessStatus.CHECKING,
@@ -26,6 +35,7 @@ data class AuthUiState(
     val email: String = "",
     val fieldErrors: Map<AuthField, String> = emptyMap(),
     val message: String? = null,
+    val recovery: PasswordRecoveryState? = null,
 )
 
 /** Coordina la sesión y el perfil privado sin exponer Firebase a los composables. */
@@ -44,6 +54,56 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
 
     /** Retira errores anteriores al cambiar entre login y registro. */
     fun clearErrors() { _state.update { it.copy(fieldErrors = emptyMap(), message = null) } }
+
+    // --- Recuperación de contraseña ---
+
+    /** Abre el diálogo con el correo de login sin alterar las credenciales escritas. */
+    fun openRecovery() {
+        if (_state.value.busy || _state.value.access != AccessStatus.SIGNED_OUT) return
+        _state.update { it.copy(recovery = PasswordRecoveryState(email = it.email)) }
+    }
+
+    /** Cierra el diálogo cuando no hay un envío activo; el formulario de login se conserva. */
+    fun closeRecovery() {
+        if (_state.value.busy) return
+        _state.update { it.copy(recovery = null) }
+    }
+
+    /** Edita solo el correo de recuperación y retira los resultados de su valor anterior. */
+    fun updateRecoveryEmail(value: String) {
+        if (_state.value.busy) return
+        _state.update { current ->
+            current.copy(recovery = current.recovery?.let { PasswordRecoveryState(email = value) })
+        }
+    }
+
+    /** Valida y solicita el correo; espera al proveedor y conserva el diálogo ante un fallo. */
+    fun recoverPassword() {
+        val form = _state.value.recovery ?: return
+        if (_state.value.busy || _state.value.access != AccessStatus.SIGNED_OUT || form.sent) return
+        val emailError = validateEmail(form.email)[AuthField.EMAIL]
+        _state.update { it.copy(recovery = form.copy(emailError = emailError, error = null)) }
+        if (emailError != null) return
+        _state.update { it.copy(busy = true) }
+        viewModelScope.launch {
+            try {
+                // No limitar await: cancelarlo no cancela el envío que sigue procesando Firebase.
+                repository.sendPasswordResetEmail(form.email.trim())
+                _state.update { it.copy(recovery = form.copy(sent = true, error = null, emailError = null)) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _state.update {
+                    it.copy(recovery = form.copy(error = (error as? AuthFailure)?.message
+                        ?: "No se ha podido solicitar el correo de recuperación. Comprueba la conexión y reintenta."))
+                }
+            } finally {
+                _state.update { it.copy(busy = false) }
+            }
+        }
+    }
+
+    // --- Acceso y perfil privado ---
 
     /** Recupera la sesión persistente y comprueba el perfil contra el servidor. */
     fun restoreSession() {

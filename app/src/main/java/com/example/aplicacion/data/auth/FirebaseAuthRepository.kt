@@ -2,6 +2,7 @@ package com.example.aplicacion.data.auth
 
 import com.example.aplicacion.model.UserProfile
 import com.google.firebase.FirebaseNetworkException
+import com.google.firebase.FirebaseTooManyRequestsException
 import com.google.firebase.auth.FirebaseAuthException
 import kotlinx.coroutines.CancellationException
 import com.google.firebase.auth.FirebaseAuth
@@ -25,6 +26,18 @@ class FirebaseAuthRepository @Inject constructor(
     /** Abre una sesión con correo y contraseña verificados por Authentication. */
     override suspend fun signIn(email: String, password: String) {
         remoteCall { auth.signInWithEmailAndPassword(email, password).await() }
+    }
+
+    /** Solicita la recuperación; no revela si el correo pertenece a una cuenta existente. */
+    override suspend fun sendPasswordResetEmail(email: String) {
+        remoteCall("No se ha podido solicitar el correo de recuperación. Reintenta en unos minutos.") {
+            try {
+                auth.sendPasswordResetEmail(email).await()
+            } catch (error: FirebaseAuthException) {
+                // Mantiene la misma respuesta aunque el proyecto no proteja la enumeración de cuentas.
+                if (error.errorCode != "ERROR_USER_NOT_FOUND") throw error
+            }
+        }
     }
 
     /** Lee del servidor para no confundir un fallo de red con un perfil inexistente. */
@@ -65,7 +78,10 @@ class FirebaseAuthRepository @Inject constructor(
     override fun signOut() = auth.signOut()
 
     /** Traduce errores del SDK; preserva la cancelación de las corutinas. */
-    private suspend fun <T> remoteCall(action: suspend () -> T): T = try {
+    private suspend fun <T> remoteCall(
+        failureMessage: String = "No se ha podido autenticar la cuenta. Comprueba el correo y la contraseña.",
+        action: suspend () -> T,
+    ): T = try {
         action()
     } catch (cancelled: CancellationException) {
         throw cancelled
@@ -76,8 +92,10 @@ class FirebaseAuthRepository @Inject constructor(
             "ERROR_INVALID_EMAIL" -> "El correo electrónico no es válido."
             "ERROR_USER_DISABLED" -> "La cuenta está deshabilitada."
             "ERROR_TOO_MANY_REQUESTS" -> "Demasiados intentos. Espera unos minutos antes de reintentar."
-            else -> "No se ha podido autenticar la cuenta. Comprueba el correo y la contraseña."
+            else -> failureMessage
         })
+    } catch (error: FirebaseTooManyRequestsException) {
+        throw AuthFailure("Demasiados intentos. Espera unos minutos antes de reintentar.")
     } catch (error: FirebaseNetworkException) {
         throw AuthFailure("No hay conexión con Firebase. Comprueba la red y reintenta.")
     }

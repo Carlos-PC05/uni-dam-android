@@ -158,6 +158,116 @@ class AuthViewModelTest {
         assertEquals(AuthUiState(access = AccessStatus.SIGNED_OUT), vm.state.value)
     }
 
+    /** Solicitar recuperación acepta el correo del diálogo sin contraseña ni nueva sesión. */
+    @Test fun recoverySendsEmailWithoutChangingLogin() = runTest {
+        val remote = FakeAuthRepository()
+        val vm = AuthViewModel(remote)
+        vm.updateEmail("alice@example.com")
+        vm.openRecovery()
+        assertEquals("alice@example.com", vm.state.value.recovery?.email)
+        vm.updateRecoveryEmail(" bob@example.com ")
+        vm.recoverPassword()
+        runCurrent()
+        assertEquals(listOf("bob@example.com"), remote.recoveryRequests)
+        assertTrue(vm.state.value.recovery!!.sent)
+        assertEquals("alice@example.com", vm.state.value.email)
+        assertEquals(AccessStatus.SIGNED_OUT, vm.state.value.access)
+        assertNull(remote.userId)
+        assertNull(vm.state.value.profile)
+        assertFalse(vm.state.value.busy)
+    }
+
+    /** Un correo inválido no llega al proveedor ni se interpreta como envío correcto. */
+    @Test fun recoveryRejectsInvalidEmail() = runTest {
+        val remote = FakeAuthRepository()
+        val vm = AuthViewModel(remote)
+        vm.openRecovery()
+        vm.updateRecoveryEmail("correo incorrecto")
+        vm.recoverPassword()
+        runCurrent()
+        assertTrue(remote.recoveryRequests.isEmpty())
+        assertNotNull(vm.state.value.recovery?.emailError)
+        assertFalse(vm.state.value.recovery!!.sent)
+        assertFalse(vm.state.value.busy)
+    }
+
+    /** Un fallo remoto conserva ambos correos y permite reintentar sin reiniciar login. */
+    @Test fun recoveryFailureKeepsFormAndCanRetry() = runTest {
+        val remote = FakeAuthRepository().apply { recoveryFailure = true }
+        val vm = AuthViewModel(remote)
+        vm.updateEmail("alice@example.com")
+        vm.openRecovery()
+        vm.updateRecoveryEmail("bob@example.com")
+        vm.recoverPassword()
+        runCurrent()
+        assertEquals("Sin conexión.", vm.state.value.recovery?.error)
+        assertEquals("bob@example.com", vm.state.value.recovery?.email)
+        assertEquals("alice@example.com", vm.state.value.email)
+        assertFalse(vm.state.value.recovery!!.sent)
+        assertFalse(vm.state.value.busy)
+        remote.recoveryFailure = false
+        vm.recoverPassword()
+        runCurrent()
+        assertTrue(vm.state.value.recovery!!.sent)
+        assertNull(vm.state.value.recovery?.error)
+        vm.closeRecovery()
+        assertNull(vm.state.value.recovery)
+        assertEquals("alice@example.com", vm.state.value.email)
+    }
+
+    /** Una respuesta lenta no permite reenviar, cerrar ni alterar el destinatario pendiente. */
+    @Test fun recoveryWaitsForProviderBeforeAllowingAnotherRequest() = runTest {
+        val remote = FakeAuthRepository().apply { gate = CompletableDeferred() }
+        val vm = AuthViewModel(remote)
+        vm.updateEmail("alice@example.com")
+        vm.openRecovery()
+        vm.recoverPassword()
+        runCurrent()
+        advanceTimeBy(31_000)
+        runCurrent()
+        vm.recoverPassword()
+        vm.closeRecovery()
+        vm.updateRecoveryEmail("bob@example.com")
+        vm.signIn("incorrecta")
+        assertTrue(vm.state.value.busy)
+        assertEquals("alice@example.com", vm.state.value.recovery?.email)
+        assertEquals(listOf("alice@example.com"), remote.recoveryRequests)
+        assertNull(remote.userId)
+        remote.gate!!.complete(Unit)
+        runCurrent()
+        assertTrue(vm.state.value.recovery!!.sent)
+        assertFalse(vm.state.value.busy)
+        vm.recoverPassword()
+        assertEquals(1, remote.recoveryRequests.size)
+    }
+
+    /** Cambiar el correo tras el éxito retira la confirmación que correspondía al anterior. */
+    @Test fun editingRecoveryEmailClearsPreviousResult() = runTest {
+        val vm = AuthViewModel(FakeAuthRepository())
+        vm.updateEmail("alice@example.com")
+        vm.openRecovery()
+        vm.recoverPassword()
+        runCurrent()
+        vm.updateRecoveryEmail("bob@example.com")
+        assertEquals(PasswordRecoveryState("bob@example.com"), vm.state.value.recovery)
+    }
+
+    /** La recuperación no puede abrirse desde una sesión privada ni alterar su perfil. */
+    @Test fun recoveryDoesNotReplaceAuthenticatedSession() = runTest {
+        val remote = FakeAuthRepository().apply {
+            userId = "alice"
+            profile = UserProfile("alice", "Alicia", "alice@example.com")
+        }
+        val vm = AuthViewModel(remote)
+        runCurrent()
+        val ready = vm.state.value
+        vm.openRecovery()
+        vm.recoverPassword()
+        runCurrent()
+        assertEquals(ready, vm.state.value)
+        assertTrue(remote.recoveryRequests.isEmpty())
+    }
+
     /** Un correo duplicado se muestra como error sin dar acceso ni perder los datos. */
     @Test fun duplicateEmailDoesNotEnterHome() = runTest {
         val vm = AuthViewModel(FakeAuthRepository().apply { registrationFailure = true })
@@ -175,11 +285,13 @@ class AuthViewModelTest {
 private class FakeAuthRepository : AuthRepository {
     override var userId: String? = null
     var profile: UserProfile? = null
+    val recoveryRequests = mutableListOf<String>()
     var registrations = 0
     var readFailure = false
     var saveFailure = false
     var signInFailure = false
     var registrationFailure = false
+    var recoveryFailure = false
     var gate: CompletableDeferred<Unit>? = null
 
     /** Simula un alta remota que puede bloquearse o rechazar un correo duplicado. */
@@ -194,6 +306,13 @@ private class FakeAuthRepository : AuthRepository {
         if (signInFailure) throw AuthFailure("Credenciales incorrectas.")
         userId = "alice"
     }
+    /** Registra las solicitudes de recuperación sin abrir ninguna sesión. */
+    override suspend fun sendPasswordResetEmail(email: String) {
+        recoveryRequests += email
+        gate?.await()
+        if (recoveryFailure) throw AuthFailure("Sin conexión.")
+    }
+
     /** Distingue un documento ausente de un fallo de red. */
     override suspend fun loadProfile(): UserProfile? {
         if (readFailure) throw AuthFailure("Sin conexión.")

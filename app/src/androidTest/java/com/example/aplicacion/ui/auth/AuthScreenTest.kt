@@ -71,6 +71,8 @@ class AuthScreenTest {
             override suspend fun register(email: String, password: String) = error("No se registra en esta prueba")
             /** Esta prueba parte de una sesión existente. */
             override suspend fun signIn(email: String, password: String) = error("No se autentica en esta prueba")
+            /** El recorrido de sesión no solicita correos de recuperación. */
+            override suspend fun sendPasswordResetEmail(email: String) = error("No se recupera en esta prueba")
             /** Recupera el perfil sintético del recorrido de navegación. */
             override suspend fun loadProfile(): UserProfile = UserProfile("alice", "Alicia", "alice@example.com")
             /** El recorrido no modifica perfiles. */
