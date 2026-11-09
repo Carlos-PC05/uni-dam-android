@@ -1,0 +1,19 @@
+{
+  "project_info": {
+    "project_number": "123456789012",
+    "project_id": "demo-vesta",
+    "storage_bucket": "demo-vesta.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:123456789012:android:0123456789abcdef",
+        "android_client_info": {
+          "package_name": "com.example.aplicacion"
+        }
+      },
+      "api_key": [{ "current_key": "AIzaSyDemoVestaOnlyForLocalEmulators12345" }]
+    }
+  ],
+  "configuration_version": "1"
+}
