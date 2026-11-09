@@ -88,3 +88,12 @@ El 8 de noviembre de 2026 se desplegaron las reglas del perfil y la política de
 contraseñas, y pasaron 19 comprobaciones contra Firebase real con dos cuentas
 ficticias, eliminadas al terminar. Véanse las
 [evidencias y límites de la verificación](docs/verificacion/acceso-privado.md).
+
+## Integración continua
+
+Los PR hacia `main` ejecutan compilación, pruebas unitarias, Android Lint y
+pruebas instrumentadas en API 29. Cuando el PR incluye la suite Firebase,
+también ejecutan sus pruebas de reglas e integración contra emuladores locales.
+CI utiliza configuración ficticia y no necesita credenciales Firebase reales.
+
+Consulta [la configuración y las protecciones acordadas](docs/ci.md).
