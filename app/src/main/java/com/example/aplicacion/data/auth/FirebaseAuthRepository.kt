@@ -30,20 +30,34 @@ class FirebaseAuthRepository @Inject constructor(
     /** Lee del servidor para no confundir un fallo de red con un perfil inexistente. */
     override suspend fun loadProfile(): UserProfile? {
         val user = checkNotNull(auth.currentUser) { "No hay una sesión activa." }
-        val doc = firestore.collection("usuarios").document(user.uid).get(Source.SERVER).let { remoteCall { it.await() } }
+
+        val doc = firestore.collection("usuarios")
+            .document(user.uid)
+            .get(Source.SERVER)
+            .let { remoteCall { it.await() } }
+
         if (!doc.exists()) return null
+
         val name = checkNotNull(doc.getString("nombreCompleto")) { "El perfil no contiene un nombre válido." }
+
         check(name.isNotBlank() && name.length <= 100) { "El perfil contiene un nombre inválido." }
+
         return UserProfile(user.uid, name, checkNotNull(user.email))
     }
 
     /** Reutiliza el uid como documento: reintentar el guardado no crea perfiles duplicados. */
     override suspend fun saveProfile(fullName: String): UserProfile {
         val user = checkNotNull(auth.currentUser) { "No hay una sesión activa." }
+
         val name = fullName.trim()
+
         require(name.isNotEmpty() && name.length <= 100) { "El nombre debe tener entre 1 y 100 caracteres." }
-        firestore.collection("usuarios").document(user.uid)
-            .set(mapOf("nombreCompleto" to name)).let { remoteCall { it.await() } }
+
+        firestore.collection("usuarios")
+            .document(user.uid)
+            .set(mapOf("nombreCompleto" to name))
+            .let { remoteCall { it.await() } }
+
         return UserProfile(user.uid, name, checkNotNull(user.email))
     }
 
