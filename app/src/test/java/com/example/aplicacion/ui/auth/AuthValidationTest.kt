@@ -3,7 +3,7 @@ package com.example.aplicacion.ui.auth
 import org.junit.Assert.*
 import org.junit.Test
 
-/** Verifica las reglas de contraseña acordadas a través de la validación pública. */
+/** Verifica correo y contraseñas a través de la validación pública de los formularios. */
 class AuthValidationTest {
     /** Una contraseña válida tiene doce caracteres y los tres grupos exigidos. */
     @Test fun acceptsTwelveCharacters() {
@@ -49,4 +49,13 @@ class AuthValidationTest {
         assertTrue(validateLogin(" c@example.com ", "antigua").isEmpty())
         assertEquals(setOf(AuthField.EMAIL, AuthField.PASSWORD), validateLogin("", "").keys)
     }
+
+    /** Recuperar acceso solo exige un correo válido y permite espacios externos. */
+    @Test fun recoveryValidatesEmailWithoutPassword() {
+        assertTrue(validateEmail(" alice@example.com ").isEmpty())
+        listOf("", "  ", "alice", "alice@", "a b@example.com").forEach { email ->
+            assertEquals(setOf(AuthField.EMAIL), validateEmail(email).keys)
+        }
+    }
+
 }

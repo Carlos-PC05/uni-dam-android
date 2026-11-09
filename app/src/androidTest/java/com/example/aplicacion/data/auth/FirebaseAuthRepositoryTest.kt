@@ -13,10 +13,13 @@ import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.util.UUID
+import java.net.HttpURLConnection
+import java.net.URL
+import org.json.JSONObject
 
 /** Prueba el repositorio Android real contra Authentication y Firestore locales. */
 class FirebaseAuthRepositoryTest {
-    /** Alta, perfil, cierre, login y separación de dos cuentas usando los SDK reales. */
+    /** Comprueba perfil, cambio de contraseña, cierre y aislamiento con los SDK reales. */
     @Test fun accountAndProfileRoundTrip() = runBlocking {
         assumeTrue("Requiere emuladores Firebase y el argumento firebaseEmulators=true",
             InstrumentationRegistry.getArguments().getString("firebaseEmulators") == "true")
@@ -42,13 +45,21 @@ class FirebaseAuthRepositoryTest {
             assertEquals(profile, repo.loadProfile())
             repo.signOut()
             assertNull(repo.userId)
+            repo.sendPasswordResetEmail(email)
+            assertNull(repo.userId)
+            val code = passwordResetCode(email)
+            assertEquals(email, auth.verifyPasswordResetCode(code).await())
+            val newPassword = "nueva prueba segura 456@"
+            auth.confirmPasswordReset(code, newPassword).await()
             try {
-                repo.signIn(email, "incorrecta")
-                fail("Las credenciales incorrectas no deben abrir sesión")
+                repo.signIn(email, password)
+                fail("La contraseña anterior al cambio no debe abrir sesión")
             } catch (_: AuthFailure) { assertNull(repo.userId) }
-            repo.signIn(email, password)
+            repo.signIn(email, newPassword)
             assertEquals(profile, repo.loadProfile())
             repo.signOut()
+            repo.sendPasswordResetEmail("missing-$email")
+            assertNull(repo.userId)
             repo.register("second-$email", password)
             assertNotEquals(firstUid, repo.userId)
             assertNull(repo.loadProfile())
@@ -63,6 +74,28 @@ class FirebaseAuthRepositoryTest {
             repo.signOut()
             db.terminate().await()
             app.delete()
+        }
+    }
+
+    /** Obtiene el enlace ficticio del emulador local, sin acceder a ningún buzón ni servicio remoto. */
+    private fun passwordResetCode(email: String): String {
+        val connection = URL("http://127.0.0.1:9099/emulator/v1/projects/demo-vesta/oobCodes")
+            .openConnection() as HttpURLConnection
+        connection.connectTimeout = 5_000
+        connection.readTimeout = 5_000
+        try {
+            check(connection.responseCode == 200) { "No se pudieron consultar los correos emulados" }
+            val response = connection.inputStream.bufferedReader().use { it.readText() }
+            val codes = JSONObject(response).getJSONArray("oobCodes")
+            for (index in codes.length() - 1 downTo 0) {
+                val code = codes.getJSONObject(index)
+                if (code.getString("email") == email && code.getString("requestType") == "PASSWORD_RESET") {
+                    return code.getString("oobCode")
+                }
+            }
+            error("No se generó el correo de recuperación de la cuenta de prueba")
+        } finally {
+            connection.disconnect()
         }
     }
 }
