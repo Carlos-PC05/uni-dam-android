@@ -31,6 +31,9 @@ jobs:
 
       - name: Preparar Android SDK
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          # El valor por defecto de v3 incluye `tools`, retirado del SDK.
+          packages: platform-tools
 
       - name: Configurar Firebase ficticio
         run: cp .github/ci/google-services.json app/google-services.json
