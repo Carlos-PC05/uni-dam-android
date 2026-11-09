@@ -24,8 +24,7 @@ perfil remoto; si falla ese paso, se puede reintentar sin crear otra cuenta.
 Al reabrir, un perfil incompleto vuelve al formulario de finalización. Los
 formularios conservan sus datos ante errores; las contraseñas solo viven en memoria
 y se descartan al abandonar la pantalla o recrearla. No se ofrece modo offline.
-Movimientos e Inversiones están identificados como pendientes; la recuperación de
-contraseña pertenece al siguiente ticket.
+Movimientos e Inversiones están identificados como pendientes.
 
 ### Preparar Firebase remoto
 
@@ -88,6 +87,46 @@ El 8 de noviembre de 2026 se desplegaron las reglas del perfil y la política de
 contraseñas, y pasaron 19 comprobaciones contra Firebase real con dos cuentas
 ficticias, eliminadas al terminar. Véanse las
 [evidencias y límites de la verificación](docs/verificacion/acceso-privado.md).
+
+## Recuperación y cierre de sesión (ticket 02 / GitHub #10)
+
+En login, «¿Has olvidado tu contraseña?» abre un diálogo con el correo precargado.
+Se puede editar sin cambiar el correo ni la contraseña escritos en login. El envío
+muestra carga y bloquea solicitudes simultáneas; un error conserva los datos para
+reintentar. Tras la respuesta de Firebase se muestra la confirmación acordada.
+El enlace del correo permite elegir la nueva contraseña en la página de Firebase;
+después se vuelve a la app para iniciar sesión.
+
+### Cómo seguir el código
+
+1. `ui/auth/AuthScreen.kt` representa el formulario y `PasswordRecoveryDialog`.
+   Reciben estado y callbacks: no consultan Firebase. El diálogo se superpone a
+   login para conservar su contraseña en memoria.
+2. `ui/navigation/VestaApp.kt` conecta los callbacks al `AuthViewModel`. La
+   recuperación no añade un destino al historial de navegación.
+3. `ui/auth/AuthViewModel.kt` mantiene `PasswordRecoveryState` dentro de
+   `AuthUiState`. `openRecovery` precarga el correo; `updateRecoveryEmail` edita
+   solo el diálogo; `recoverPassword` valida y espera la respuesta del repositorio;
+   `closeRecovery` retira el diálogo. `busy` impide duplicados hasta que el SDK
+   termina: cancelar la espera de una corutina no cancela el envío de Firebase.
+4. `data/auth/FirebaseAuthRepository.kt` implementa
+   `AuthRepository.sendPasswordResetEmail` con el SDK de Authentication. Traduce
+   los fallos a mensajes comprensibles y no crea sesiones ni modifica perfiles.
+   `ui/auth/AuthValidation.kt` comparte la validación del correo entre formularios.
+
+El cierre sigue siendo local: `signOut` retira las credenciales y reinicia todo el
+estado visible. Al desaparecer el perfil se desmonta la navegación privada; su
+clave por UID evita compartirla entre cuentas. No se borran los perfiles remotos.
+La cancelación de recordatorios se implementará en el ticket 14.
+
+La confirmación de envío no demuestra que el correo exista ni que se haya entregado.
+Se mantiene una respuesta uniforme para cuentas inexistentes, incluso si el
+proyecto no tiene protección contra enumeración. No se consulta la existencia de
+una cuenta antes de solicitar la recuperación.
+
+Las [pruebas y los pasos de comprobación manual](docs/verificacion/recuperacion-sesion.md)
+separan la evidencia con emuladores de la demostración con correo real, que Carlos
+realizará manualmente.
 
 ## Integración continua
 
