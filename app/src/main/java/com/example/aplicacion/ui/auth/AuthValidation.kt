@@ -4,12 +4,17 @@ package com.example.aplicacion.ui.auth
 enum class AuthField { NAME, EMAIL, PASSWORD, CONFIRMATION }
 
 /** Comprueba el correo antes de enviarlo; Authentication realiza la validación definitiva. */
-fun validateLogin(email: String, password: String): Map<AuthField, String> = buildMap {
+fun validateEmail(email: String): Map<AuthField, String> = buildMap {
     if (!email.trim().matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"))) {
         put(AuthField.EMAIL, "Introduce un correo electrónico válido.")
     }
-    if (password.isEmpty()) put(AuthField.PASSWORD, "Introduce tu contraseña.")
 }
+
+/** Valida las credenciales de acceso sin aplicar la política de las cuentas nuevas. */
+fun validateLogin(email: String, password: String): Map<AuthField, String> =
+    validateEmail(email).toMutableMap().apply {
+        if (password.isEmpty()) put(AuthField.PASSWORD, "Introduce tu contraseña.")
+    }
 
 /** Valida nombre, correo y contraseña sin modificar los caracteres de las credenciales. */
 fun validateRegistration(name: String, email: String, password: String, confirmation: String): Map<AuthField, String> =
