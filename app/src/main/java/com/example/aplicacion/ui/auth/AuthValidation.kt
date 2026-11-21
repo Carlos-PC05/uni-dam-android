@@ -3,11 +3,14 @@ package com.example.aplicacion.ui.auth
 /** Campos cuyos errores se muestran junto al formulario correspondiente. */
 enum class AuthField { NAME, EMAIL, PASSWORD, CONFIRMATION }
 
-/** Comprueba el correo antes de enviarlo; Authentication realiza la validación definitiva. */
-fun validateLogin(email: String, password: String): Map<AuthField, String> = buildMap {
-    if (!email.trim().matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"))) {
-        put(AuthField.EMAIL, "Introduce un correo electrónico válido.")
+/** Devuelve el error local de formato, si lo hay. Firebase realiza la validación definitiva. */
+fun emailError(email: String): String? =
+    "Introduce un correo electrónico válido.".takeUnless {
+        email.trim().matches(Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"))
     }
+
+fun validateLogin(email: String, password: String): Map<AuthField, String> = buildMap {
+    emailError(email)?.let { put(AuthField.EMAIL, it) }
     if (password.isEmpty()) put(AuthField.PASSWORD, "Introduce tu contraseña.")
 }
 

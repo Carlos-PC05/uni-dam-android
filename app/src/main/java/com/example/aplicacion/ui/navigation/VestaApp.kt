@@ -41,6 +41,7 @@ private fun AuthNavigation(state: AuthUiState, viewModel: AuthViewModel) {
         composable<Login> {
             AuthScreen(state, false, viewModel::updateName, viewModel::updateEmail,
                 onSubmit = { password, _ -> viewModel.signIn(password) },
+                onPasswordReset = viewModel::sendPasswordReset,
                 onSwitch = { viewModel.clearErrors(); nav.navigate(Register) { launchSingleTop = true } })
         }
         composable<Register> {

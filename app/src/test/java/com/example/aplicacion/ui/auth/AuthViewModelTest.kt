@@ -156,6 +156,37 @@ class AuthViewModelTest {
         vm.signOut()
         assertNull(remote.userId)
         assertEquals(AuthUiState(access = AccessStatus.SIGNED_OUT), vm.state.value)
+
+        val secondProfile = UserProfile("bob", "Bruno", "bob@example.com")
+        remote.profile = secondProfile
+        vm.updateEmail(secondProfile.email)
+        vm.signIn("second-password")
+        runCurrent()
+        assertEquals(AccessStatus.READY, vm.state.value.access)
+        assertEquals(secondProfile, vm.state.value.profile)
+    }
+
+    @Test fun passwordResetValidatesAndPreservesTheLoginForm() = runTest {
+        val remote = FakeAuthRepository()
+        val vm = AuthViewModel(remote)
+        vm.sendPasswordReset()
+        assertTrue(AuthField.EMAIL in vm.state.value.fieldErrors)
+        assertNull(remote.resetEmail)
+
+        vm.updateEmail(" alice@example.com ")
+        vm.sendPasswordReset()
+        runCurrent()
+        assertEquals("alice@example.com", remote.resetEmail)
+        assertNotNull(vm.state.value.recoveryMessage)
+        assertNull(vm.state.value.message)
+
+        remote.resetFailure = true
+        vm.sendPasswordReset()
+        runCurrent()
+        assertEquals("Sin conexión.", vm.state.value.message)
+        assertNull(vm.state.value.recoveryMessage)
+        assertEquals(" alice@example.com ", vm.state.value.email)
+        assertEquals(AccessStatus.SIGNED_OUT, vm.state.value.access)
     }
 
     /** Un correo duplicado se muestra como error sin dar acceso ni perder los datos. */
@@ -180,6 +211,8 @@ private class FakeAuthRepository : AuthRepository {
     var saveFailure = false
     var signInFailure = false
     var registrationFailure = false
+    var resetFailure = false
+    var resetEmail: String? = null
     var gate: CompletableDeferred<Unit>? = null
 
     /** Simula un alta remota que puede bloquearse o rechazar un correo duplicado. */
@@ -192,8 +225,14 @@ private class FakeAuthRepository : AuthRepository {
     /** Simula la autenticación sin aplicar reglas locales a contraseñas existentes. */
     override suspend fun signIn(email: String, password: String) {
         if (signInFailure) throw AuthFailure("Credenciales incorrectas.")
-        userId = "alice"
+        userId = profile?.takeIf { it.email == email }?.uid ?: "alice"
     }
+
+    override suspend fun sendPasswordReset(email: String) {
+        if (resetFailure) throw AuthFailure("Sin conexión.")
+        resetEmail = email
+    }
+
     /** Distingue un documento ausente de un fallo de red. */
     override suspend fun loadProfile(): UserProfile? {
         if (readFailure) throw AuthFailure("Sin conexión.")

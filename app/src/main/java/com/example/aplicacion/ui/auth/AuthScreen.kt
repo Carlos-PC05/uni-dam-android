@@ -32,6 +32,7 @@ fun AuthScreen(
     onEmailChange: (String) -> Unit,
     onSubmit: (String, String) -> Unit,
     onSwitch: () -> Unit,
+    onPasswordReset: (() -> Unit)? = null,
 ) {
     var password by remember { mutableStateOf("") }
     var confirmation by remember { mutableStateOf("") }
@@ -52,6 +53,15 @@ fun AuthScreen(
             PasswordField("Confirmar contraseña", confirmation, { confirmation = it },
                 state.fieldErrors[AuthField.CONFIRMATION], !state.busy)
         }
+        if (onPasswordReset != null) {
+            TextButton(onClick = onPasswordReset, enabled = !state.busy) {
+                Text("Recuperar contraseña")
+            }
+        }
+        state.recoveryMessage?.let {
+            Text(it, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                style = MaterialTheme.typography.bodyMedium)
+        }
         AuthError(state.message)
         Spacer(Modifier.height(20.dp))
         Button(onClick = { onSubmit(password, confirmation) }, enabled = !state.busy,
@@ -60,7 +70,7 @@ fun AuthScreen(
                 CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
                 Spacer(Modifier.width(12.dp))
             }
-            Text(if (state.busy) "Guardando…" else if (registering) "Crear cuenta" else "Iniciar sesión")
+            Text(if (state.busy) "Enviando solicitud…" else if (registering) "Crear cuenta" else "Iniciar sesión")
         }
         Spacer(Modifier.height(20.dp))
         TextButton(onClick = onSwitch, enabled = !state.busy, modifier = Modifier.align(Alignment.CenterHorizontally)) {

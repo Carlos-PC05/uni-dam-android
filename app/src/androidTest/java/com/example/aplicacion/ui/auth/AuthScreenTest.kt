@@ -44,10 +44,11 @@ class AuthScreenTest {
     @Test fun loadingDisablesSubmitAndNavigation() {
         compose.setContent {
             AplicacionTheme {
-                AuthScreen(AuthUiState(access = AccessStatus.SIGNED_OUT, busy = true), false, {}, {}, { _, _ -> }, {})
+                AuthScreen(AuthUiState(access = AccessStatus.SIGNED_OUT, busy = true), false, {}, {}, { _, _ -> }, {}, onPasswordReset = {})
             }
         }
-        compose.onNodeWithText("Guardando…").assertIsNotEnabled()
+        compose.onNodeWithText("Recuperar contraseña").assertIsNotEnabled()
+        compose.onNodeWithText("Enviando solicitud…").assertIsNotEnabled()
         compose.onNodeWithText("¿No tienes cuenta? Regístrate").assertIsNotEnabled()
     }
 
@@ -69,10 +70,21 @@ class AuthScreenTest {
             override var userId: String? = "alice"
             /** Esta prueba parte de una cuenta existente. */
             override suspend fun register(email: String, password: String) = error("No se registra en esta prueba")
-            /** Esta prueba parte de una sesión existente. */
-            override suspend fun signIn(email: String, password: String) = error("No se autentica en esta prueba")
-            /** Recupera el perfil sintético del recorrido de navegación. */
-            override suspend fun loadProfile(): UserProfile = UserProfile("alice", "Alicia", "alice@example.com")
+            override suspend fun signIn(email: String, password: String) {
+                assertEquals("bob@example.com", email)
+                assertEquals("second-password", password)
+                userId = "bob"
+            }
+
+            override suspend fun sendPasswordReset(email: String) {
+                assertEquals("bob@example.com", email)
+            }
+
+            override suspend fun loadProfile(): UserProfile = when (userId) {
+                "alice" -> UserProfile("alice", "Alicia", "alice@example.com")
+                "bob" -> UserProfile("bob", "Bruno", "bob@example.com")
+                else -> error("No hay sesión activa")
+            }
             /** El recorrido no modifica perfiles. */
             override suspend fun saveProfile(fullName: String): UserProfile = error("No se guarda en esta prueba")
             /** Retira la sesión sintética al salir de Ajustes. */
@@ -89,6 +101,13 @@ class AuthScreenTest {
         compose.onNodeWithText("Cerrar sesión").performClick()
         compose.onNodeWithText("Iniciar sesión").assertExists()
         compose.onNodeWithText("alice@example.com").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Correo electrónico").performTextInput("bob@example.com")
+        compose.onNodeWithContentDescription("Contraseña").performScrollTo().performTextInput("second-password")
+        compose.onNodeWithText("Recuperar contraseña").performScrollTo().performClick()
+        compose.onNodeWithText("Si hay una cuenta con ese correo,", substring = true).assertExists()
+        compose.onNodeWithText("Iniciar sesión").performScrollTo().performClick()
+        compose.onNodeWithText("Hola, Bruno").assertExists()
+        compose.onNodeWithText("Hola, Alicia").assertDoesNotExist()
     }
 
     /** Guarda una captura del composable para revisar la presentación sin marcos del emulador. */
