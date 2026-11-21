@@ -46,6 +46,9 @@ class FirebaseAuthRepositoryTest {
                 repo.signIn(email, "incorrecta")
                 fail("Las credenciales incorrectas no deben abrir sesión")
             } catch (_: AuthFailure) { assertNull(repo.userId) }
+            repo.sendPasswordReset(email)
+            repo.sendPasswordReset("unknown-$email")
+            assertNull(repo.userId)
             repo.signIn(email, password)
             assertEquals(profile, repo.loadProfile())
             repo.signOut()

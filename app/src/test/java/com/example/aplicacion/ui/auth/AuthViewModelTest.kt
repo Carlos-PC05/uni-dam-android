@@ -174,19 +174,18 @@ class AuthViewModelTest {
         assertNull(remote.resetEmail)
 
         vm.updateEmail(" alice@example.com ")
+        vm.sendPasswordReset()
+        runCurrent()
+        assertEquals("alice@example.com", remote.resetEmail)
+        assertNotNull(vm.state.value.recoveryMessage)
+        assertNull(vm.state.value.message)
+
         remote.resetFailure = true
         vm.sendPasswordReset()
         runCurrent()
         assertEquals("Sin conexión.", vm.state.value.message)
         assertNull(vm.state.value.recoveryMessage)
         assertEquals(" alice@example.com ", vm.state.value.email)
-
-        remote.resetFailure = false
-        vm.sendPasswordReset()
-        runCurrent()
-        assertEquals("alice@example.com", remote.resetEmail)
-        assertNotNull(vm.state.value.recoveryMessage)
-        assertNull(vm.state.value.message)
         assertEquals(AccessStatus.SIGNED_OUT, vm.state.value.access)
     }
 

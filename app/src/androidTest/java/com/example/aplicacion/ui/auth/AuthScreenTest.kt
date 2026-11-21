@@ -44,9 +44,10 @@ class AuthScreenTest {
     @Test fun loadingDisablesSubmitAndNavigation() {
         compose.setContent {
             AplicacionTheme {
-                AuthScreen(AuthUiState(access = AccessStatus.SIGNED_OUT, busy = true), false, {}, {}, { _, _ -> }, {})
+                AuthScreen(AuthUiState(access = AccessStatus.SIGNED_OUT, busy = true), false, {}, {}, { _, _ -> }, {}, onPasswordReset = {})
             }
         }
+        compose.onNodeWithText("Recuperar contraseña").assertIsNotEnabled()
         compose.onNodeWithText("Enviando solicitud…").assertIsNotEnabled()
         compose.onNodeWithText("¿No tienes cuenta? Regístrate").assertIsNotEnabled()
     }

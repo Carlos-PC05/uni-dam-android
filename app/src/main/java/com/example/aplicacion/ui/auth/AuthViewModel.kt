@@ -138,7 +138,7 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
 
     /** Serializa acciones y conserva el formulario; solo el perfil admite una espera limitada. */
     private fun perform(failureAccess: AccessStatus, action: suspend () -> Unit) {
-        _state.update { it.copy(busy = true, message = null, fieldErrors = emptyMap()) }
+        _state.update { it.copy(busy = true, message = null, recoveryMessage = null, fieldErrors = emptyMap()) }
         viewModelScope.launch {
             try {
                 // Cancelar await no cancela el alta del SDK: no liberar el envío antes de su respuesta.
