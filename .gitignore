@@ -49,7 +49,6 @@ local.properties
 !gradle/wrapper/gradle-wrapper.jar
 
 # Dev Tools
-AGENTS.md
 docs/agents/
 .codegraph/
 
