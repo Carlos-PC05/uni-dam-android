@@ -2,6 +2,8 @@ package com.example.aplicacion.di
 
 import com.example.aplicacion.data.auth.AuthRepository
 import com.example.aplicacion.data.auth.FirebaseAuthRepository
+import com.example.aplicacion.data.cash.FirebaseInitialBalanceRepository
+import com.example.aplicacion.data.cash.InitialBalanceRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
@@ -13,7 +15,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
-/** Dependencias compartidas de la cuenta, construidas por Hilt. */
+/** Dependencias compartidas de la cuenta y su efectivo, construidas por Hilt. */
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class AuthModule {
@@ -21,12 +23,15 @@ abstract class AuthModule {
     @Binds @Singleton
     abstract fun bindAuthRepository(repository: FirebaseAuthRepository): AuthRepository
 
+    @Binds
+    abstract fun bindInitialBalanceRepository(repository: FirebaseInitialBalanceRepository): InitialBalanceRepository
+
     companion object {
         /** Recupera Authentication, que conserva la sesión entre aperturas. */
         @Provides @Singleton
         fun provideAuth(): FirebaseAuth = FirebaseAuth.getInstance()
 
-        /** Evita dejar perfiles privados en la caché persistente del dispositivo. */
+        /** Evita dejar datos privados en la caché persistente del dispositivo. */
         @Provides @Singleton
         fun provideFirestore(): FirebaseFirestore = FirebaseFirestore.getInstance().apply {
             firestoreSettings = FirebaseFirestoreSettings.Builder()

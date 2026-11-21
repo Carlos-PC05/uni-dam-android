@@ -42,3 +42,35 @@ test('el perfil solo acepta un nombre válido', async () => {
   await assertSucceeds(setDoc(doc(db, 'usuarios/alice'), { nombreCompleto: 'Alicia corregida' }));
   await assertFails(setDoc(doc(db, 'movimientos/cualquiera'), { importe: 1 }));
 });
+
+test('el saldo tiene una única ruta, privada e inmutable', async () => {
+  const owner = env.authenticatedContext('alice').firestore();
+  const path = 'usuarios/alice/efectivo/saldoInicial';
+  const balance = { centimos: -1250, dia: 19723 };
+  const reference = doc(owner, path);
+  for (const outsider of [env.authenticatedContext('bob'), env.unauthenticatedContext()]) {
+    const foreignReference = doc(outsider.firestore(), path);
+    await assertFails(setDoc(foreignReference, balance));
+  }
+  await assertSucceeds(setDoc(reference, balance));
+  assert.deepEqual((await assertSucceeds(getDoc(reference))).data(), balance);
+  for (const outsider of [env.authenticatedContext('bob'), env.unauthenticatedContext()]) {
+    await assertFails(getDoc(doc(outsider.firestore(), path)));
+  }
+  await assertFails(setDoc(reference, { ...balance, centimos: 0 }));
+  await assertFails(deleteDoc(reference));
+  await assertFails(setDoc(doc(owner, 'usuarios/alice/efectivo/segundoSaldo'), balance));
+});
+
+test('las reglas exigen céntimos enteros y un día de calendario válido', async () => {
+  const db = env.authenticatedContext('alice').firestore();
+  const reference = doc(db, 'usuarios/alice/efectivo/saldoInicial');
+  const valid = { centimos: 0, dia: 19723 };
+  const future = Math.floor(Date.now() / 86400000) + 2;
+  for (const data of [{ dia: valid.dia }, { centimos: 0 }, { ...valid, centimos: 0.01 },
+    { ...valid, centimos: '0' }, { ...valid, dia: 19723.5 }, { ...valid, dia: future },
+    { ...valid, dia: -719163 }, { ...valid, moneda: 'USD' }]) {
+    await assertFails(setDoc(reference, data));
+  }
+  await assertSucceeds(setDoc(reference, valid));
+});

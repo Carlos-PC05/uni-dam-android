@@ -1,6 +1,11 @@
 package com.example.aplicacion.ui.auth
 
 import com.example.aplicacion.data.auth.AuthRepository
+import com.example.aplicacion.data.cash.InitialBalanceRepository
+import com.example.aplicacion.model.InitialBalance
+import com.example.aplicacion.ui.inicio.InitialBalanceViewModel
+import androidx.compose.runtime.remember
+import java.time.LocalDate
 import com.example.aplicacion.model.UserProfile
 import com.example.aplicacion.ui.navigation.VestaApp
 import android.graphics.Bitmap
@@ -91,8 +96,18 @@ class AuthScreenTest {
             override fun signOut() { userId = null }
         }
         val vm = AuthViewModel(remote)
-        compose.setContent { AplicacionTheme { VestaApp(vm) } }
+        val balances = object : InitialBalanceRepository {
+            override suspend fun load(uid: String): InitialBalance? =
+                if (uid == "alice") InitialBalance(-1250, LocalDate.of(2024, 1, 1)) else null
+
+            override suspend fun create(uid: String, balance: InitialBalance): InitialBalance =
+                error("El recorrido solo consulta el saldo")
+        }
+        compose.setContent {
+            AplicacionTheme { VestaApp(vm, balanceViewModel = { remember { InitialBalanceViewModel(balances) } }) }
+        }
         compose.onNodeWithText("Hola, Alicia").assertExists()
+        compose.onNodeWithText("-12,50", substring = true).assertExists()
         compose.onNodeWithText("Movimientos").performClick()
         compose.onNodeWithText("Pendiente de implementación. Esta sección se incorporará en su ticket correspondiente.").assertExists()
         compose.onNodeWithText("Inversiones").performClick()
@@ -107,6 +122,8 @@ class AuthScreenTest {
         compose.onNodeWithText("Si hay una cuenta con ese correo,", substring = true).assertExists()
         compose.onNodeWithText("Iniciar sesión").performScrollTo().performClick()
         compose.onNodeWithText("Hola, Bruno").assertExists()
+        compose.onNodeWithText("Configura tu saldo inicial").assertExists()
+        compose.onNodeWithText("-12,50", substring = true).assertDoesNotExist()
         compose.onNodeWithText("Hola, Alicia").assertDoesNotExist()
     }
 

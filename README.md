@@ -16,8 +16,8 @@ acceso remoto, `di` su configuración y `ui/navigation` las rutas tipadas.
 El registro solicita nombre, correo y dos contraseñas idénticas. La contraseña
 requiere 12–4096 caracteres, al menos una letra, un dígito y un símbolo de
 `-_?#@.`; admite espacios y otros caracteres. Authentication gestiona las
-credenciales: Firestore solo guarda `usuarios/{uid}.nombreCompleto`, y el correo
-se obtiene de Authentication. No se guardan contraseñas ni hashes en los perfiles.
+credenciales. Para el perfil, Firestore guarda `usuarios/{uid}.nombreCompleto`
+y el correo se obtiene de Authentication. No se guardan contraseñas ni hashes en los perfiles.
 
 Después del alta se mantiene la sesión. Inicio solo se abre tras confirmar el
 perfil remoto; si falla ese paso, se puede reintentar sin crear otra cuenta.
@@ -35,10 +35,11 @@ contraseña pertenece al siguiente ticket.
    carácter no alfanumérico, en modo obligatorio. La app además exige una letra
    y un símbolo de la lista acordada. La consola no permite expresar exactamente
    todas esas condiciones combinadas; no se añade un servidor propio al proyecto.
-3. Crear Cloud Firestore. Revisar las reglas actualmente desplegadas antes de
-   sustituirlas: las de este ticket solo permiten el perfil y deniegan otras rutas.
+3. Crear Cloud Firestore y revisar las reglas actualmente desplegadas antes de
+   sustituirlas, en especial si el proyecto tiene otras colecciones.
 4. Tras iniciar sesión en Firebase CLI con una cuenta autorizada, desplegar desde
-   la raíz: `firebase-tests/node_modules/.bin/firebase deploy --only firestore:rules --project practica-moviles-android-67eba`.
+   la raíz con `firebase-tests/node_modules/.bin/firebase deploy --only firestore:rules --project <ID_DEL_PROYECTO>`.
+   Usa el `project_info.project_id` del `google-services.json` local.
 5. Verificar los casos remotos descritos más abajo. La compilación y las pruebas
    locales no demuestran que los proveedores, la política o las reglas remotas
    estén configurados. No usar datos financieros reales en estas comprobaciones.
@@ -88,6 +89,39 @@ El 8 de noviembre de 2026 se desplegaron las reglas del perfil y la política de
 contraseñas, y pasaron 19 comprobaciones contra Firebase real con dos cuentas
 ficticias, eliminadas al terminar. Véanse las
 [evidencias y límites de la verificación](docs/verificacion/acceso-privado.md).
+
+## Saldo inicial
+
+En Inicio, introduce un importe en euros y una fecha en formato
+`DD/MM/AAAA`. El saldo representa el efectivo al comienzo de ese día. El
+ViewModel convierte el importe a céntimos enteros, comprueba la fecha local y
+mantiene el formulario mientras espera la confirmación de Firestore. Inicio
+muestra «Consultando el saldo…» durante la lectura, permite reintentar si falla
+y abre el formulario cuando el servidor confirma que el saldo aún no existe.
+
+El repositorio lee del servidor y, al guardar, abre una transacción sobre
+`usuarios/{uid}/efectivo/saldoInicial`. El documento contiene `centimos` y
+`dia` (días desde el 1 de enero de 1970), por lo que la fecha no cambia al
+viajar entre husos horarios. La app rechaza fechas posteriores a su día local.
+Las reglas usan UTC+14 como límite, porque el servidor desconoce la zona del
+dispositivo. Si el documento ya existe, la transacción devuelve
+esa referencia. Solo el propietario puede leerla y crearla. Inicio muestra el
+efectivo confirmado en euros.
+
+### Demostración del saldo inicial
+
+1. Despliega las reglas de Firestore en el proyecto que indica el
+   `google-services.json` local y usa una cuenta de prueba sin saldo.
+2. En Inicio prueba `12,345`, `30/02/2024` y una fecha posterior a hoy.
+   Comprueba que el formulario señala los campos inválidos.
+3. Escribe `-12,50` y `01/01/2024`. Desconecta la red, guarda y comprueba que
+   reaparece la opción de guardado con ambos valores. Recupera la conexión y
+   guarda. Comprueba que Inicio muestra `-12,50 €` y la fecha inicial.
+4. Reinicia la app y comprueba que aparece el mismo saldo directamente. Con
+   cuentas de prueba distintas, repite la configuración con `0` y `12,50`.
+5. Ejecuta `./gradlew :app:testDebugUnitTest` para comprobar el formulario y
+   `npm --prefix firebase-tests test` para verificar la privacidad y unicidad
+   con las reglas locales.
 
 ## Integración continua
 

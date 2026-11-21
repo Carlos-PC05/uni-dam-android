@@ -17,18 +17,22 @@ import com.example.aplicacion.R
 import com.example.aplicacion.model.UserProfile
 import com.example.aplicacion.ui.auth.*
 import com.example.aplicacion.ui.inicio.HomeScreen
+import com.example.aplicacion.ui.inicio.InitialBalanceViewModel
 import com.example.aplicacion.ui.ajustes.ProfileScreen
 
 /** Separa los grafos público y privado: Atrás nunca recupera una pantalla de otra sesión. */
 @Composable
-fun VestaApp(viewModel: AuthViewModel = hiltViewModel()) {
+fun VestaApp(
+    viewModel: AuthViewModel = hiltViewModel(),
+    balanceViewModel: @Composable () -> InitialBalanceViewModel = { hiltViewModel() },
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     when (state.access) {
         AccessStatus.CHECKING, AccessStatus.FAILED -> AccessCheckScreen(state, viewModel::restoreSession, viewModel::signOut)
         AccessStatus.SIGNED_OUT -> AuthNavigation(state, viewModel)
         AccessStatus.INCOMPLETE -> CompleteProfileScreen(state, viewModel::updateName, viewModel::completeProfile, viewModel::signOut)
         AccessStatus.READY -> state.profile?.let { profile ->
-            key(profile.uid) { MainNavigation(profile, viewModel::signOut) }
+            key(profile.uid) { MainNavigation(profile, viewModel::signOut, balanceViewModel) }
         }
     }
 }
@@ -73,9 +77,13 @@ private fun AccessCheckScreen(state: AuthUiState, onRetry: () -> Unit, onSignOut
     }
 }
 
-/** Conecta las cuatro secciones previstas; las financieras se identifican como pendientes. */
+/** Mantiene el saldo en Inicio y las demás secciones en destinos independientes. */
 @Composable
-private fun MainNavigation(profile: UserProfile, onSignOut: () -> Unit) {
+private fun MainNavigation(
+    profile: UserProfile,
+    onSignOut: () -> Unit,
+    balanceViewModel: @Composable () -> InitialBalanceViewModel,
+) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val labels = listOf("Inicio", "Movimientos", "Inversiones", "Ajustes")
@@ -105,7 +113,20 @@ private fun MainNavigation(profile: UserProfile, onSignOut: () -> Unit) {
     }) { padding ->
         NavHost(navController = nav, startDestination = Home, modifier = Modifier.padding(padding)) {
             composable<Home> {
-                ScrollableContent { HomeScreen(profile) { nav.navigate(Settings) } }
+                val homeViewModel = balanceViewModel()
+                val balanceState by homeViewModel.state.collectAsStateWithLifecycle()
+                LaunchedEffect(profile.uid) { homeViewModel.load(profile.uid) }
+                ScrollableContent {
+                    HomeScreen(
+                        profile = profile,
+                        state = balanceState,
+                        onAmountChange = homeViewModel::updateAmount,
+                        onDateChange = homeViewModel::updateDate,
+                        onSave = { homeViewModel.save(profile.uid) },
+                        onRetry = { homeViewModel.load(profile.uid) },
+                        onProfile = { nav.navigate(Settings) },
+                    )
+                }
             }
             composable<Movements> { PendingScreen("Movimientos") }
             composable<Investments> { PendingScreen("Inversiones") }
