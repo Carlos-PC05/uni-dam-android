@@ -27,6 +27,17 @@ class FirebaseAuthRepository @Inject constructor(
         remoteCall { auth.signInWithEmailAndPassword(email, password).await() }
     }
 
+    override suspend fun sendPasswordReset(email: String) {
+        remoteCall(fallback = "No se ha podido solicitar la recuperación. Reintenta más tarde.") {
+            try {
+                auth.sendPasswordResetEmail(email).await()
+            } catch (error: FirebaseAuthException) {
+                // La respuesta visible no debe confirmar si el correo está registrado.
+                if (error.errorCode != "ERROR_USER_NOT_FOUND") throw error
+            }
+        }
+    }
+
     /** Lee del servidor para no confundir un fallo de red con un perfil inexistente. */
     override suspend fun loadProfile(): UserProfile? {
         val user = checkNotNull(auth.currentUser) { "No hay una sesión activa." }
@@ -51,7 +62,10 @@ class FirebaseAuthRepository @Inject constructor(
     override fun signOut() = auth.signOut()
 
     /** Traduce errores del SDK; preserva la cancelación de las corutinas. */
-    private suspend fun <T> remoteCall(action: suspend () -> T): T = try {
+    private suspend fun <T> remoteCall(
+        fallback: String = "No se ha podido autenticar la cuenta. Comprueba el correo y la contraseña.",
+        action: suspend () -> T,
+    ): T = try {
         action()
     } catch (cancelled: CancellationException) {
         throw cancelled
@@ -62,7 +76,7 @@ class FirebaseAuthRepository @Inject constructor(
             "ERROR_INVALID_EMAIL" -> "El correo electrónico no es válido."
             "ERROR_USER_DISABLED" -> "La cuenta está deshabilitada."
             "ERROR_TOO_MANY_REQUESTS" -> "Demasiados intentos. Espera unos minutos antes de reintentar."
-            else -> "No se ha podido autenticar la cuenta. Comprueba el correo y la contraseña."
+            else -> fallback
         })
     } catch (error: FirebaseNetworkException) {
         throw AuthFailure("No hay conexión con Firebase. Comprueba la red y reintenta.")

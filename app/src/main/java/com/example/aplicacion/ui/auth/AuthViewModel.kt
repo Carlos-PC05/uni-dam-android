@@ -26,6 +26,7 @@ data class AuthUiState(
     val email: String = "",
     val fieldErrors: Map<AuthField, String> = emptyMap(),
     val message: String? = null,
+    val recoveryMessage: String? = null,
 )
 
 /** Coordina la sesión y el perfil privado sin exponer Firebase a los composables. */
@@ -40,10 +41,10 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
     fun updateName(value: String) { _state.update { it.copy(fullName = value, fieldErrors = it.fieldErrors - AuthField.NAME) } }
 
     /** Conserva el correo; las contraseñas nunca forman parte de este estado. */
-    fun updateEmail(value: String) { _state.update { it.copy(email = value, fieldErrors = it.fieldErrors - AuthField.EMAIL) } }
+    fun updateEmail(value: String) { _state.update { it.copy(email = value, fieldErrors = it.fieldErrors - AuthField.EMAIL, recoveryMessage = null) } }
 
     /** Retira errores anteriores al cambiar entre login y registro. */
-    fun clearErrors() { _state.update { it.copy(fieldErrors = emptyMap(), message = null) } }
+    fun clearErrors() { _state.update { it.copy(fieldErrors = emptyMap(), message = null, recoveryMessage = null) } }
 
     /** Recupera la sesión persistente y comprueba el perfil contra el servidor. */
     fun restoreSession() {
@@ -61,7 +62,7 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
         if (_state.value.busy) return
         val form = _state.value
         val errors = validateRegistration(form.fullName, form.email, password, confirmation)
-        _state.update { it.copy(fieldErrors = errors, message = null) }
+        _state.update { it.copy(fieldErrors = errors, message = null, recoveryMessage = null) }
         if (errors.isNotEmpty()) return
         perform(AccessStatus.SIGNED_OUT) {
             repository.register(form.email.trim(), password)
@@ -76,11 +77,32 @@ class AuthViewModel @Inject constructor(private val repository: AuthRepository) 
         if (_state.value.busy) return
         val form = _state.value
         val errors = validateLogin(form.email, password)
-        _state.update { it.copy(fieldErrors = errors, message = null) }
+        _state.update { it.copy(fieldErrors = errors, message = null, recoveryMessage = null) }
         if (errors.isNotEmpty()) return
         perform(AccessStatus.SIGNED_OUT) {
             repository.signIn(form.email.trim(), password)
             loadProfile()
+        }
+    }
+
+    /** Solicita recuperación para el correo del login y conserva el formulario. */
+    fun sendPasswordReset() {
+        val form = _state.value
+        if (form.busy || form.access != AccessStatus.SIGNED_OUT) return
+        val error = emailError(form.email)
+        if (error != null) {
+            _state.update { it.copy(
+                fieldErrors = mapOf(AuthField.EMAIL to error),
+                message = null,
+                recoveryMessage = null,
+            ) }
+            return
+        }
+        perform(AccessStatus.SIGNED_OUT) {
+            repository.sendPasswordReset(form.email.trim())
+            _state.update { it.copy(
+                recoveryMessage = "Si hay una cuenta con ese correo, recibirás un enlace para restablecer la contraseña.",
+            ) }
         }
     }
 
