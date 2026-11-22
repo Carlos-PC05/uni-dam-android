@@ -1,6 +1,8 @@
 package com.example.aplicacion.data.auth
 
 import androidx.test.platform.app.InstrumentationRegistry
+import com.example.aplicacion.data.cash.FirebaseInitialBalanceRepository
+import com.example.aplicacion.model.InitialBalance
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
@@ -12,11 +14,12 @@ import kotlinx.coroutines.tasks.await
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
+import java.time.LocalDate
 import java.util.UUID
 
 /** Prueba el repositorio Android real contra Authentication y Firestore locales. */
 class FirebaseAuthRepositoryTest {
-    /** Alta, perfil, cierre, login y separación de dos cuentas usando los SDK reales. */
+    /** Alta, perfil, saldo, reapertura y separación de dos cuentas con los SDK reales. */
     @Test fun accountAndProfileRoundTrip() = runBlocking {
         assumeTrue("Requiere emuladores Firebase y el argumento firebaseEmulators=true",
             InstrumentationRegistry.getArguments().getString("firebaseEmulators") == "true")
@@ -31,15 +34,19 @@ class FirebaseAuthRepositoryTest {
             useEmulator("127.0.0.1", 8080)
         }
         val repo = FirebaseAuthRepository(auth, db)
+        val cash = FirebaseInitialBalanceRepository(db)
         val email = "test-${UUID.randomUUID()}@example.com"
         val password = "prueba segura 123@"
         try {
             repo.register(email, password)
-            val firstUid = repo.userId
-            assertNotNull(firstUid)
+            val firstUid = checkNotNull(repo.userId)
             assertNull(repo.loadProfile())
             val profile = repo.saveProfile("Carlos de prueba")
             assertEquals(profile, repo.loadProfile())
+            assertNull(cash.load(firstUid))
+            val balance = InitialBalance(-1250, LocalDate.of(2024, 1, 1))
+            assertEquals(balance, cash.create(firstUid, balance))
+            assertEquals(balance, cash.create(firstUid, balance.copy(cents = 0)))
             repo.signOut()
             assertNull(repo.userId)
             try {
@@ -51,13 +58,15 @@ class FirebaseAuthRepositoryTest {
             assertNull(repo.userId)
             repo.signIn(email, password)
             assertEquals(profile, repo.loadProfile())
+            assertEquals(balance, cash.load(firstUid))
             repo.signOut()
             repo.register("second-$email", password)
             assertNotEquals(firstUid, repo.userId)
             assertNull(repo.loadProfile())
             repo.saveProfile("Segunda cuenta")
+            assertNull(cash.load(checkNotNull(repo.userId)))
             try {
-                db.collection("usuarios").document(firstUid!!).get().await()
+                db.collection("usuarios").document(firstUid).get().await()
                 fail("Otra cuenta no puede leer el perfil anterior")
             } catch (error: com.google.firebase.firestore.FirebaseFirestoreException) {
                 assertEquals(com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED, error.code)
