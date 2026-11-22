@@ -1,7 +1,7 @@
 import { after, before, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, collection, getDocs, runTransaction } from 'firebase/firestore';
 import { readFile } from 'node:fs/promises';
 
 let env;
@@ -73,4 +73,39 @@ test('las reglas exigen céntimos enteros y un día de calendario válido', asyn
     await assertFails(setDoc(reference, data));
   }
   await assertSucceeds(setDoc(reference, valid));
+});
+
+test('los movimientos respetan el saldo inicial, los datos válidos y la privacidad', async () => {
+  const owner = env.authenticatedContext('alice').firestore();
+  const path = 'usuarios/alice/movimientos';
+  const id = 'bf101add-e1d3-4acb-8202-044350add4c3';
+  const reference = doc(owner, path, id);
+  const today = Math.floor(Date.now() / 86400000);
+  const valid = { centimos: 50000, dia: today - 1, categoria: 'INCOME', nota: '' };
+  await assertFails(setDoc(reference, valid));
+  await assertSucceeds(setDoc(doc(owner, 'usuarios/alice/efectivo/saldoInicial'), {
+    centimos: 100000, dia: valid.dia,
+  }));
+  for (const data of [{ ...valid, centimos: 0 }, { ...valid, centimos: 0.01 },
+    { ...valid, dia: valid.dia - 1 }, { ...valid, dia: today + 2 },
+    { ...valid, categoria: 'INVALID' }, { ...valid, nota: 'x'.repeat(501) }]) {
+    await assertFails(setDoc(reference, data));
+  }
+  for (const outsider of [env.authenticatedContext('bob'), env.unauthenticatedContext()]) {
+    const db = outsider.firestore();
+    await assertFails(setDoc(doc(db, path, id), valid));
+    await assertFails(getDocs(collection(db, path)));
+    await assertFails(getDoc(doc(db, path, id)));
+  }
+  const createOnce = () => runTransaction(owner, async transaction => {
+    if (!(await transaction.get(reference)).exists()) transaction.set(reference, valid);
+  });
+  await assertSucceeds(createOnce());
+  await assertSucceeds(createOnce());
+  await assertSucceeds(setDoc(doc(owner, path, 'c25d1447-e37c-4cec-ab3a-014172c41dab'), {
+    ...valid, dia: today, categoria: 'FOOD', centimos: 20000,
+  }));
+  assert.equal((await assertSucceeds(getDocs(collection(owner, path)))).size, 2);
+  await assertFails(setDoc(reference, { ...valid, centimos: 1 }));
+  await assertFails(deleteDoc(reference));
 });

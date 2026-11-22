@@ -8,6 +8,9 @@ import androidx.compose.runtime.remember
 import java.time.LocalDate
 import com.example.aplicacion.model.UserProfile
 import com.example.aplicacion.ui.navigation.VestaApp
+import com.example.aplicacion.data.cash.MovementRepository
+import com.example.aplicacion.model.Movement
+import com.example.aplicacion.ui.movimientos.MovementsViewModel
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.test.platform.app.InstrumentationRegistry
@@ -103,13 +106,25 @@ class AuthScreenTest {
             override suspend fun create(uid: String, balance: InitialBalance): InitialBalance =
                 error("El recorrido solo consulta el saldo")
         }
+        val movementRepository = object : MovementRepository {
+            override suspend fun load(uid: String): List<Movement> = emptyList()
+
+            override suspend fun create(uid: String, movement: Movement) =
+                error("El recorrido solo consulta los movimientos")
+        }
         compose.setContent {
-            AplicacionTheme { VestaApp(vm, balanceViewModel = { remember { InitialBalanceViewModel(balances) } }) }
+            AplicacionTheme {
+                VestaApp(
+                    vm,
+                    balanceViewModel = { remember { InitialBalanceViewModel(balances) } },
+                    cashViewModel = { graph -> remember(graph) { MovementsViewModel(movementRepository, balances) } },
+                )
+            }
         }
         compose.onNodeWithText("Hola, Alicia").assertExists()
         compose.onNodeWithText("-12,50", substring = true).assertExists()
         compose.onNodeWithText("Movimientos").performClick()
-        compose.onNodeWithText("Pendiente de implementación. Esta sección se incorporará en su ticket correspondiente.").assertExists()
+        compose.onNodeWithText("No hay movimientos en este mes.").assertExists()
         compose.onNodeWithText("Inversiones").performClick()
         compose.onNodeWithText("Ajustes").performClick()
         compose.onNodeWithText("alice@example.com").assertExists()

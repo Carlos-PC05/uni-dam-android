@@ -16,10 +16,8 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.example.aplicacion.model.InitialBalance
 import com.example.aplicacion.model.UserProfile
-import java.math.BigDecimal
-import java.text.NumberFormat
-import java.util.Locale
 
 /** Muestra el efectivo confirmado o guía al usuario para configurar su primera referencia. */
 @Composable
@@ -31,6 +29,7 @@ fun HomeScreen(
     onSave: () -> Unit,
     onRetry: () -> Unit,
     onProfile: () -> Unit,
+    cashSummary: @Composable (InitialBalance) -> Unit,
 ) {
     Column(
         Modifier.fillMaxWidth().padding(24.dp),
@@ -40,10 +39,7 @@ fun HomeScreen(
         val balance = state.balance
         when {
             balance != null -> {
-                val euros = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-ES"))
-                    .format(BigDecimal.valueOf(balance.cents, 2))
-                Text("Efectivo", style = MaterialTheme.typography.titleLarge)
-                Text(euros, style = MaterialTheme.typography.headlineMedium)
+                cashSummary(balance)
                 Text("Saldo inicial al comienzo del ${balance.date.format(calendarDateFormat)}")
             }
             state.loaded -> {

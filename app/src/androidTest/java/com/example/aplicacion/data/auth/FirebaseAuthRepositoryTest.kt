@@ -2,6 +2,9 @@ package com.example.aplicacion.data.auth
 
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.aplicacion.data.cash.FirebaseInitialBalanceRepository
+import com.example.aplicacion.data.cash.FirebaseMovementRepository
+import com.example.aplicacion.model.Movement
+import com.example.aplicacion.model.MovementCategory
 import com.example.aplicacion.model.InitialBalance
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
@@ -35,6 +38,7 @@ class FirebaseAuthRepositoryTest {
         }
         val repo = FirebaseAuthRepository(auth, db)
         val cash = FirebaseInitialBalanceRepository(db)
+        val movements = FirebaseMovementRepository(db)
         val email = "test-${UUID.randomUUID()}@example.com"
         val password = "prueba segura 123@"
         try {
@@ -47,6 +51,10 @@ class FirebaseAuthRepositoryTest {
             val balance = InitialBalance(-1250, LocalDate.of(2024, 1, 1))
             assertEquals(balance, cash.create(firstUid, balance))
             assertEquals(balance, cash.create(firstUid, balance.copy(cents = 0)))
+            val income = Movement(UUID.randomUUID().toString(), 50000, balance.date, MovementCategory.INCOME, "")
+            movements.create(firstUid, income)
+            movements.create(firstUid, income)
+            assertEquals(listOf(income), movements.load(firstUid))
             repo.signOut()
             assertNull(repo.userId)
             try {
@@ -64,7 +72,15 @@ class FirebaseAuthRepositoryTest {
             assertNotEquals(firstUid, repo.userId)
             assertNull(repo.loadProfile())
             repo.saveProfile("Segunda cuenta")
-            assertNull(cash.load(checkNotNull(repo.userId)))
+            val secondUid = checkNotNull(repo.userId)
+            assertNull(cash.load(secondUid))
+            assertEquals(emptyList<Movement>(), movements.load(secondUid))
+            try {
+                movements.load(firstUid)
+                fail("Otra cuenta no puede consultar los movimientos anteriores")
+            } catch (error: com.google.firebase.firestore.FirebaseFirestoreException) {
+                assertEquals(com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED, error.code)
+            }
             try {
                 db.collection("usuarios").document(firstUid).get().await()
                 fail("Otra cuenta no puede leer el perfil anterior")

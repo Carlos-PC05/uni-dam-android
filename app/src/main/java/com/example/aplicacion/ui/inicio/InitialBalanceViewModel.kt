@@ -96,7 +96,7 @@ internal val calendarDateFormat: DateTimeFormatter =
 
 private val euroAmount = Regex("[+-]?[0-9]+([,.][0-9]{1,2})?")
 
-private fun parseCents(amount: String): Long? {
+internal fun parseCents(amount: String): Long? {
     if (!euroAmount.matches(amount)) return null
     return runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()
 }

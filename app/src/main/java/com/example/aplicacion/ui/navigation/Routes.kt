@@ -9,3 +9,4 @@ import kotlinx.serialization.Serializable
 @Serializable object Movements
 @Serializable object Investments
 @Serializable object Settings
+@Serializable object NewMovement
