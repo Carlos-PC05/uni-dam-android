@@ -2,9 +2,11 @@ package com.example.aplicacion.ui.auth
 
 import com.example.aplicacion.data.auth.AuthRepository
 import com.example.aplicacion.data.cash.InitialBalanceRepository
+import com.example.aplicacion.data.cash.PendingMovementStore
 import com.example.aplicacion.model.InitialBalance
 import com.example.aplicacion.ui.inicio.InitialBalanceViewModel
 import androidx.compose.runtime.remember
+import androidx.lifecycle.viewmodel.compose.viewModel
 import java.time.LocalDate
 import com.example.aplicacion.model.UserProfile
 import com.example.aplicacion.ui.navigation.VestaApp
@@ -99,9 +101,10 @@ class AuthScreenTest {
             override fun signOut() { userId = null }
         }
         val vm = AuthViewModel(remote)
+        var aliceBalance: InitialBalance? = null
         val balances = object : InitialBalanceRepository {
             override suspend fun load(uid: String): InitialBalance? =
-                if (uid == "alice") InitialBalance(-1250, LocalDate.of(2024, 1, 1)) else null
+                if (uid == "alice") aliceBalance else null
 
             override suspend fun create(uid: String, balance: InitialBalance): InitialBalance =
                 error("El recorrido solo consulta el saldo")
@@ -112,19 +115,32 @@ class AuthScreenTest {
             override suspend fun create(uid: String, movement: Movement) =
                 error("El recorrido solo consulta los movimientos")
         }
+        val pendingStore = object : PendingMovementStore {
+            override suspend fun load(uid: String): Movement? = null
+            override suspend fun save(uid: String, movement: Movement) = error("El recorrido solo consulta movimientos")
+            override suspend fun clear(uid: String) = error("El recorrido solo consulta movimientos")
+        }
         compose.setContent {
             AplicacionTheme {
                 VestaApp(
                     vm,
                     balanceViewModel = { remember { InitialBalanceViewModel(balances) } },
-                    cashViewModel = { graph -> remember(graph) { MovementsViewModel(movementRepository, balances) } },
+                    cashViewModel = { graph ->
+                        viewModel(viewModelStoreOwner = graph) {
+                            MovementsViewModel(movementRepository, balances, pendingStore)
+                        }
+                    },
                 )
             }
         }
         compose.onNodeWithText("Hola, Alicia").assertExists()
-        compose.onNodeWithText("-12,50", substring = true).assertExists()
+        compose.onNodeWithText("Configura tu saldo inicial").assertExists()
+        compose.runOnIdle { aliceBalance = InitialBalance(-1250, LocalDate.of(2024, 1, 1)) }
         compose.onNodeWithText("Movimientos").performClick()
         compose.onNodeWithText("No hay movimientos en este mes.").assertExists()
+        compose.onNodeWithText("Inicio").performClick()
+        compose.onNodeWithText("-12,50", substring = true).assertExists()
+        compose.onNodeWithText("Configura tu saldo inicial").assertDoesNotExist()
         compose.onNodeWithText("Inversiones").performClick()
         compose.onNodeWithText("Ajustes").performClick()
         compose.onNodeWithText("alice@example.com").assertExists()

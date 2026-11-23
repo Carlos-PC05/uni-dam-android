@@ -8,7 +8,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -60,20 +59,21 @@ fun MovementsScreen(state: MovementsState, viewModel: MovementsViewModel, uid: S
             val balance = state.balance
             if (balance != null) {
                 item {
-                    Button(onClick = onAdd, enabled = !state.busy) { Text("Registrar movimiento") }
+                    Button(onClick = onAdd, enabled = !state.busy && state.movements != null) {
+                        Text(if (state.awaitingConfirmation) "Continuar guardado" else "Registrar movimiento")
+                    }
                     MonthSelector(state.month, balance, viewModel::selectMonth)
                 }
                 val visible = state.movements.orEmpty()
                     .filter { YearMonth.from(it.date) == state.month }
                     .sortedByDescending { it.date }
-                if (visible.isEmpty()) item { Text("No hay movimientos en este mes.") }
+                if (state.movements != null && visible.isEmpty()) item { Text("No hay movimientos en este mes.") }
                 items(visible, key = { it.id }) { movement ->
                     val income = movement.category == MovementCategory.INCOME
                     Text("${movement.date.format(calendarDateFormat)} · ${movement.category.label}")
-                    val green = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8DE69F) else Color(0xFF176331)
                     Text(
                         "${if (income) "+" else "−"}${euros(BigInteger.valueOf(movement.cents))}",
-                        color = if (income) green else LocalContentColor.current,
+                        color = if (income) MaterialTheme.colorScheme.primary else LocalContentColor.current,
                     )
                     if (movement.note.isNotEmpty()) Text(movement.note)
                 }

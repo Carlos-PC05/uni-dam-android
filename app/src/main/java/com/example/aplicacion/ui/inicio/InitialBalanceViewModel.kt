@@ -40,8 +40,13 @@ class InitialBalanceViewModel @Inject constructor(
         if (_state.value.loaded || _state.value.busy) return
         perform("No se ha podido consultar el saldo. Reintenta.") {
             val balance = repository.load(uid)
-            _state.update { it.copy(loaded = true, balance = balance) }
+            _state.update { it.copy(loaded = true, balance = balance ?: it.balance) }
         }
+    }
+
+    /** Incorpora el saldo inmutable que Movimientos confirmó para la misma cuenta. */
+    fun acceptConfirmedBalance(balance: InitialBalance) = _state.update {
+        it.copy(loaded = true, balance = balance, amount = "", date = "", message = null)
     }
 
     fun updateAmount(amount: String) {

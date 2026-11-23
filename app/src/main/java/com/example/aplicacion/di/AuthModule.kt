@@ -2,10 +2,12 @@ package com.example.aplicacion.di
 
 import com.example.aplicacion.data.auth.AuthRepository
 import com.example.aplicacion.data.auth.FirebaseAuthRepository
+import com.example.aplicacion.data.cash.FilePendingMovementStore
 import com.example.aplicacion.data.cash.FirebaseInitialBalanceRepository
 import com.example.aplicacion.data.cash.InitialBalanceRepository
 import com.example.aplicacion.data.cash.FirebaseMovementRepository
 import com.example.aplicacion.data.cash.MovementRepository
+import com.example.aplicacion.data.cash.PendingMovementStore
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
@@ -30,6 +32,9 @@ abstract class AuthModule {
 
     @Binds
     abstract fun bindMovementRepository(repository: FirebaseMovementRepository): MovementRepository
+
+    @Binds
+    abstract fun bindPendingMovementStore(store: FilePendingMovementStore): PendingMovementStore
 
     companion object {
         /** Recupera Authentication, que conserva la sesión entre aperturas. */
