@@ -3,13 +3,16 @@ package com.example.aplicacion.ui.movimientos
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aplicacion.data.cash.InitialBalanceRepository
+import com.example.aplicacion.data.cash.MovementRejected
 import com.example.aplicacion.data.cash.MovementRepository
+import com.example.aplicacion.data.cash.PendingMovementStore
 import com.example.aplicacion.model.InitialBalance
 import com.example.aplicacion.model.Movement
 import com.example.aplicacion.model.MovementCategory
 import com.example.aplicacion.ui.inicio.calendarDateFormat
 import com.example.aplicacion.ui.inicio.parseCents
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.YearMonth
 import java.util.UUID
@@ -44,15 +47,33 @@ data class MovementsState(
 class MovementsViewModel @Inject constructor(
     private val repository: MovementRepository,
     private val balances: InitialBalanceRepository,
+    private val pendingStore: PendingMovementStore,
 ) : ViewModel() {
     private val _state = MutableStateFlow(MovementsState())
     val state = _state.asStateFlow()
     private var pending: Movement? = null
 
     fun load(uid: String) = perform("No se han podido consultar los movimientos.", loading = true) {
-        val balance = balances.load(uid)
-        val movements = if (balance == null) emptyList() else repository.load(uid)
-        _state.update { it.copy(balance = balance, movements = movements) }
+        val restored = pendingStore.load(uid)
+        if (restored != null && pending != restored) {
+            pending = restored
+            _state.update {
+                it.copy(
+                    form = MovementForm(
+                        BigDecimal.valueOf(restored.cents, 2).toPlainString(),
+                        restored.date.format(calendarDateFormat),
+                        restored.category,
+                        restored.note,
+                    ),
+                    awaitingConfirmation = true,
+                    error = "Hay un guardado pendiente. Reintenta para confirmar el movimiento.",
+                )
+            }
+        }
+        val balance = withTimeout(30_000) { balances.load(uid) }
+        _state.update { it.copy(balance = balance) }
+        val movements = if (balance == null) emptyList() else withTimeout(30_000) { repository.load(uid) }
+        _state.update { it.copy(movements = movements) }
     }
 
     fun selectMonth(month: YearMonth) = _state.update { it.copy(month = month) }
@@ -69,7 +90,22 @@ class MovementsViewModel @Inject constructor(
         pending = movement
         _state.update { it.copy(awaitingConfirmation = true) }
         perform("No se ha podido confirmar el movimiento. Puedes reintentar.") {
-            repository.create(uid, movement)
+            pendingStore.save(uid, movement)
+            try {
+                withTimeout(30_000) { repository.create(uid, movement) }
+            } catch (_: MovementRejected) {
+                pendingStore.clear(uid)
+                pending = null
+                _state.update {
+                    it.copy(
+                        awaitingConfirmation = false,
+                        error = "Firestore rechazó el movimiento. Revisa los datos antes de volver a guardar.",
+                    )
+                }
+                return@perform
+            }
+
+            pendingStore.clear(uid)
             pending = null
             _state.update {
                 it.copy(
@@ -106,7 +142,7 @@ class MovementsViewModel @Inject constructor(
         _state.update { if (loading) it.copy(busy = true, loadError = null) else it.copy(busy = true, error = null) }
         viewModelScope.launch {
             try {
-                withTimeout(30_000) { action() }
+                action()
             } catch (_: TimeoutCancellationException) {
                 _state.update { if (loading) it.copy(loadError = failure) else it.copy(error = failure) }
             } catch (cancelled: CancellationException) {

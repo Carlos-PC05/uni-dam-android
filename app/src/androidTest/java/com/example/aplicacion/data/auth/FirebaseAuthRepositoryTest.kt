@@ -1,8 +1,10 @@
 package com.example.aplicacion.data.auth
 
 import androidx.test.platform.app.InstrumentationRegistry
+import com.example.aplicacion.data.cash.FilePendingMovementStore
 import com.example.aplicacion.data.cash.FirebaseInitialBalanceRepository
 import com.example.aplicacion.data.cash.FirebaseMovementRepository
+import com.example.aplicacion.data.cash.MovementRejected
 import com.example.aplicacion.model.Movement
 import com.example.aplicacion.model.MovementCategory
 import com.example.aplicacion.model.InitialBalance
@@ -52,8 +54,21 @@ class FirebaseAuthRepositoryTest {
             assertEquals(balance, cash.create(firstUid, balance))
             assertEquals(balance, cash.create(firstUid, balance.copy(cents = 0)))
             val income = Movement(UUID.randomUUID().toString(), 50000, balance.date, MovementCategory.INCOME, "")
-            movements.create(firstUid, income)
-            movements.create(firstUid, income)
+            val pending = FilePendingMovementStore(context)
+            pending.save(firstUid, income)
+            try {
+                movements.create(firstUid, income)
+                val reopenedStore = FilePendingMovementStore(context)
+                assertNull(reopenedStore.load("otra-$firstUid"))
+                movements.create(firstUid, checkNotNull(reopenedStore.load(firstUid)))
+                try {
+                    movements.create(firstUid, income.copy(id = UUID.randomUUID().toString(), date = balance.date.minusDays(1)))
+                    fail("La fecha anterior al saldo debe rechazarse")
+                } catch (_: MovementRejected) { }
+            } finally {
+                pending.clear(firstUid)
+            }
+            assertNull(FilePendingMovementStore(context).load(firstUid))
             assertEquals(listOf(income), movements.load(firstUid))
             repo.signOut()
             assertNull(repo.userId)

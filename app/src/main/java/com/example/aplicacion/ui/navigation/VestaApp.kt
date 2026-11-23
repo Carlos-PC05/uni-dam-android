@@ -127,7 +127,12 @@ private fun MainNavigation(
                 val cashState by movements.state.collectAsStateWithLifecycle()
                 val homeViewModel = balanceViewModel()
                 val balanceState by homeViewModel.state.collectAsStateWithLifecycle()
-                LaunchedEffect(profile.uid) { homeViewModel.load(profile.uid) }
+                LaunchedEffect(cashState.balance) {
+                    cashState.balance?.let(homeViewModel::acceptConfirmedBalance)
+                }
+                LaunchedEffect(profile.uid) {
+                    if (cashState.balance == null) homeViewModel.load(profile.uid)
+                }
                 LaunchedEffect(balanceState.balance) {
                     if (balanceState.balance != null) {
                         movements.state.first { !it.busy }
@@ -161,10 +166,10 @@ private fun MainNavigation(
                 val movements = cashViewModel(remember(entry) { nav.getBackStackEntry(nav.graph.id) })
                 val cashState by movements.state.collectAsStateWithLifecycle()
                 LaunchedEffect(profile.uid) {
-                    if (cashState.balance == null) movements.load(profile.uid)
+                    if (cashState.movements == null) movements.load(profile.uid)
                 }
                 ScrollableContent {
-                    if (cashState.balance == null) {
+                    if (cashState.balance == null || cashState.movements == null) {
                         Column(Modifier.padding(24.dp)) {
                             CashStatus(cashState) { movements.load(profile.uid) }
                             TextButton(onClick = { nav.popBackStack() }) { Text("Volver a Movimientos") }
