@@ -49,6 +49,8 @@ local.properties
 !gradle/wrapper/gradle-wrapper.jar
 
 # Dev Tools
-AGENTS.md
 docs/agents/
 .codegraph/
+
+# Herramientas locales de las pruebas Firebase
+firebase-tests/node_modules/

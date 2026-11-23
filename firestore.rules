@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // El perfil y el saldo inicial tienen permisos independientes.
+    match /usuarios/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['nombreCompleto'])
+        && request.resource.data.nombreCompleto is string
+        && request.resource.data.nombreCompleto.size() >= 1
+        && request.resource.data.nombreCompleto.size() <= 100
+        && request.resource.data.nombreCompleto.matches('.*\\S.*');
+    }
+    match /usuarios/{uid}/movimientos/{movementId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && movementId.matches('[a-f0-9-]{36}')
+        && request.resource.data.keys().hasOnly(['centimos', 'dia', 'categoria', 'nota'])
+        && request.resource.data.centimos is int
+        && request.resource.data.centimos > 0
+        && request.resource.data.dia is int
+        && request.resource.data.dia >= get(/databases/$(database)/documents/usuarios/$(uid)/efectivo/saldoInicial).data.dia
+        && request.resource.data.dia <= 2932896
+        && request.resource.data.dia * 86400000 <= (request.time + duration.value(14, 'h')).toMillis()
+        && request.resource.data.categoria in ['INCOME', 'LEISURE', 'HOUSING', 'FOOD', 'TRANSPORT', 'HEALTH', 'OTHER']
+        && request.resource.data.nota is string
+        && request.resource.data.nota.size() <= 500;
+    }
+    match /usuarios/{uid}/efectivo/saldoInicial {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['centimos', 'dia'])
+        && request.resource.data.centimos is int
+        && request.resource.data.dia is int
+        // Días desde 1970-01-01, acotados a los años de calendario 1 a 9999.
+        && request.resource.data.dia >= -719162
+        && request.resource.data.dia <= 2932896
+        // El servidor admite el día vigente en UTC+14; la app valida con la fecha local.
+        && request.resource.data.dia * 86400000 <= (request.time + duration.value(14, 'h')).toMillis();
+    }
+  }
+}
