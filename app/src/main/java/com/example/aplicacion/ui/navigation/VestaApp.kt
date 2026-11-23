@@ -11,6 +11,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.*
 import com.example.aplicacion.R
@@ -19,12 +20,19 @@ import com.example.aplicacion.ui.auth.*
 import com.example.aplicacion.ui.inicio.HomeScreen
 import com.example.aplicacion.ui.inicio.InitialBalanceViewModel
 import com.example.aplicacion.ui.ajustes.ProfileScreen
+import com.example.aplicacion.ui.movimientos.CashStatus
+import com.example.aplicacion.ui.movimientos.CashSummary
+import com.example.aplicacion.ui.movimientos.MovementFormScreen
+import com.example.aplicacion.ui.movimientos.MovementsScreen
+import com.example.aplicacion.ui.movimientos.MovementsViewModel
+import kotlinx.coroutines.flow.first
 
 /** Separa los grafos público y privado: Atrás nunca recupera una pantalla de otra sesión. */
 @Composable
 fun VestaApp(
     viewModel: AuthViewModel = hiltViewModel(),
     balanceViewModel: @Composable () -> InitialBalanceViewModel = { hiltViewModel() },
+    cashViewModel: @Composable (NavBackStackEntry) -> MovementsViewModel = { hiltViewModel(it) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     when (state.access) {
@@ -32,7 +40,7 @@ fun VestaApp(
         AccessStatus.SIGNED_OUT -> AuthNavigation(state, viewModel)
         AccessStatus.INCOMPLETE -> CompleteProfileScreen(state, viewModel::updateName, viewModel::completeProfile, viewModel::signOut)
         AccessStatus.READY -> state.profile?.let { profile ->
-            key(profile.uid) { MainNavigation(profile, viewModel::signOut, balanceViewModel) }
+            key(profile.uid) { MainNavigation(profile, viewModel::signOut, balanceViewModel, cashViewModel) }
         }
     }
 }
@@ -83,13 +91,15 @@ private fun MainNavigation(
     profile: UserProfile,
     onSignOut: () -> Unit,
     balanceViewModel: @Composable () -> InitialBalanceViewModel,
+    cashViewModel: @Composable (NavBackStackEntry) -> MovementsViewModel,
 ) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val labels = listOf("Inicio", "Movimientos", "Inversiones", "Ajustes")
     val icons = listOf(R.drawable.ic_home, R.drawable.ic_movements, R.drawable.ic_investments, R.drawable.ic_profile)
     val selected = when {
-        entry?.destination?.hasRoute<Movements>() == true -> 1
+        entry?.destination?.hasRoute<Movements>() == true ||
+            entry?.destination?.hasRoute<NewMovement>() == true -> 1
         entry?.destination?.hasRoute<Investments>() == true -> 2
         entry?.destination?.hasRoute<Settings>() == true -> 3
         else -> 0
@@ -112,10 +122,23 @@ private fun MainNavigation(
         }
     }) { padding ->
         NavHost(navController = nav, startDestination = Home, modifier = Modifier.padding(padding)) {
-            composable<Home> {
+            composable<Home> { entry ->
+                val movements = cashViewModel(remember(entry) { nav.getBackStackEntry(nav.graph.id) })
+                val cashState by movements.state.collectAsStateWithLifecycle()
                 val homeViewModel = balanceViewModel()
                 val balanceState by homeViewModel.state.collectAsStateWithLifecycle()
-                LaunchedEffect(profile.uid) { homeViewModel.load(profile.uid) }
+                LaunchedEffect(cashState.balance) {
+                    cashState.balance?.let(homeViewModel::acceptConfirmedBalance)
+                }
+                LaunchedEffect(profile.uid) {
+                    if (cashState.balance == null) homeViewModel.load(profile.uid)
+                }
+                LaunchedEffect(balanceState.balance) {
+                    if (balanceState.balance != null) {
+                        movements.state.first { !it.busy }
+                        movements.load(profile.uid)
+                    }
+                }
                 ScrollableContent {
                     HomeScreen(
                         profile = profile,
@@ -125,10 +148,39 @@ private fun MainNavigation(
                         onSave = { homeViewModel.save(profile.uid) },
                         onRetry = { homeViewModel.load(profile.uid) },
                         onProfile = { nav.navigate(Settings) },
+                        cashSummary = { balance ->
+                            CashSummary(balance, cashState, movements::selectMonth) { movements.load(profile.uid) }
+                        },
                     )
                 }
             }
-            composable<Movements> { PendingScreen("Movimientos") }
+            composable<Movements> { entry ->
+                val movements = cashViewModel(remember(entry) { nav.getBackStackEntry(nav.graph.id) })
+                val cashState by movements.state.collectAsStateWithLifecycle()
+                LaunchedEffect(profile.uid) { movements.load(profile.uid) }
+                MovementsScreen(cashState, movements, profile.uid) {
+                    nav.navigate(NewMovement) { launchSingleTop = true }
+                }
+            }
+            composable<NewMovement> { entry ->
+                val movements = cashViewModel(remember(entry) { nav.getBackStackEntry(nav.graph.id) })
+                val cashState by movements.state.collectAsStateWithLifecycle()
+                LaunchedEffect(profile.uid) {
+                    if (cashState.movements == null) movements.load(profile.uid)
+                }
+                ScrollableContent {
+                    if (cashState.balance == null || cashState.movements == null) {
+                        Column(Modifier.padding(24.dp)) {
+                            CashStatus(cashState) { movements.load(profile.uid) }
+                            TextButton(onClick = { nav.popBackStack() }) { Text("Volver a Movimientos") }
+                        }
+                    } else {
+                        MovementFormScreen(cashState, movements, profile.uid) {
+                            if (nav.currentBackStackEntry == entry) nav.popBackStack()
+                        }
+                    }
+                }
+            }
             composable<Investments> { PendingScreen("Inversiones") }
             composable<Settings> { ScrollableContent { ProfileScreen(profile, onSignOut) } }
         }
@@ -138,7 +190,7 @@ private fun MainNavigation(
 /** Limita la anchura y permite recorrer el contenido privado con texto grande. */
 @Composable
 private fun ScrollableContent(content: @Composable () -> Unit) {
-    Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), contentAlignment = Alignment.TopCenter) {
+    Box(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) { content() }
     }
 }

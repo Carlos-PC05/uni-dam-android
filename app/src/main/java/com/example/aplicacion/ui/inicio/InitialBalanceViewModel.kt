@@ -40,8 +40,13 @@ class InitialBalanceViewModel @Inject constructor(
         if (_state.value.loaded || _state.value.busy) return
         perform("No se ha podido consultar el saldo. Reintenta.") {
             val balance = repository.load(uid)
-            _state.update { it.copy(loaded = true, balance = balance) }
+            _state.update { it.copy(loaded = true, balance = balance ?: it.balance) }
         }
+    }
+
+    /** Incorpora el saldo inmutable que Movimientos confirmó para la misma cuenta. */
+    fun acceptConfirmedBalance(balance: InitialBalance) = _state.update {
+        it.copy(loaded = true, balance = balance, amount = "", date = "", message = null)
     }
 
     fun updateAmount(amount: String) {
@@ -96,7 +101,7 @@ internal val calendarDateFormat: DateTimeFormatter =
 
 private val euroAmount = Regex("[+-]?[0-9]+([,.][0-9]{1,2})?")
 
-private fun parseCents(amount: String): Long? {
+internal fun parseCents(amount: String): Long? {
     if (!euroAmount.matches(amount)) return null
     return runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()
 }
