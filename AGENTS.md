@@ -6,6 +6,7 @@ Esta aplicación es una práctica universitaria que el equipo defenderá en una 
 
 - Al implementar, sigue la arquitectura MVVM del proyecto y reutiliza sus patrones. Elige la solución más sencilla que cumpla los requisitos y explica las decisiones que el equipo tendrá que defender.
 - Al entregar un cambio funcional, señala los archivos clave y describe un recorrido concreto: qué acción realiza el usuario, cómo la procesa el ViewModel, qué lee o escribe el repositorio en Firebase y cómo el resultado vuelve a la interfaz. Incluye los estados de carga y error pertinentes y cómo reproducir el recorrido. Cubre las capas que intervienen en ese cambio.
+- Al revisar el código usa las skills de `android-review`
 
 ## Ramas
 
