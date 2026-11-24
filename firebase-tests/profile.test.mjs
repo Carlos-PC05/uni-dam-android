@@ -1,7 +1,7 @@
 import { after, before, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, deleteDoc, collection, getDocs, runTransaction } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, runTransaction } from 'firebase/firestore';
 import { readFile } from 'node:fs/promises';
 
 let env;
@@ -106,6 +106,35 @@ test('los movimientos respetan el saldo inicial, los datos válidos y la privaci
     ...valid, dia: today, categoria: 'FOOD', centimos: 20000,
   }));
   assert.equal((await assertSucceeds(getDocs(collection(owner, path)))).size, 2);
-  await assertFails(setDoc(reference, { ...valid, centimos: 1 }));
+  const revision = 'b7874e62-900c-4422-bd3e-a8a5f53f2d0c';
+  for (const outsider of [env.authenticatedContext('bob'), env.unauthenticatedContext()]) {
+    const otherReference = doc(outsider.firestore(), path, id);
+    await assertFails(updateDoc(otherReference, { centimos: 1, revision }));
+    await assertFails(deleteDoc(otherReference));
+  }
+  for (const changes of [{ centimos: -1 }, { centimos: 0.01 }, { categoria: 'INVALID' },
+    { dia: valid.dia - 1 }, { dia: today + 2 }, { nota: 'x'.repeat(501) }, { extra: true }]) {
+    await assertFails(updateDoc(reference, { ...changes, revision }));
+  }
+  const corrected = { centimos: 40000, dia: today, categoria: 'HOUSING', nota: 'Corrección', revision };
+  await assertFails(updateDoc(reference, { centimos: 40000 }));
+  await assertSucceeds(updateDoc(reference, corrected));
+  await assertFails(updateDoc(reference, { centimos: 50000, revision }));
+  assert.deepEqual((await assertSucceeds(getDoc(reference))).data(), corrected);
+  assert.equal((await assertSucceeds(getDocs(collection(owner, path)))).size, 2);
+  const marker = doc(owner, 'usuarios/alice/movimientosEliminados', id);
+  await assertFails(setDoc(marker, { eliminado: true }));
   await assertFails(deleteDoc(reference));
+  const deleteOnce = () => runTransaction(owner, async transaction => {
+    if ((await transaction.get(reference)).exists()) {
+      transaction.set(marker, { eliminado: true });
+      transaction.delete(reference);
+    }
+  });
+  await assertSucceeds(deleteOnce());
+  await assertSucceeds(deleteOnce());
+  assert.equal((await assertSucceeds(getDoc(reference))).exists(), false);
+  await assertFails(createOnce());
+  await assertFails(deleteDoc(marker));
+  assert.equal((await assertSucceeds(getDocs(collection(owner, path)))).size, 1);
 });

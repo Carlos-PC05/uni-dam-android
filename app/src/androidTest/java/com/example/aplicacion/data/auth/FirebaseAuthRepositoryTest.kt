@@ -4,6 +4,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.aplicacion.data.cash.FilePendingMovementStore
 import com.example.aplicacion.data.cash.FirebaseInitialBalanceRepository
 import com.example.aplicacion.data.cash.FirebaseMovementRepository
+import com.example.aplicacion.data.cash.MovementChanged
 import com.example.aplicacion.data.cash.MovementRejected
 import com.example.aplicacion.model.Movement
 import com.example.aplicacion.model.MovementCategory
@@ -12,6 +13,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.MemoryCacheSettings
 import kotlinx.coroutines.runBlocking
@@ -70,6 +72,40 @@ class FirebaseAuthRepositoryTest {
             }
             assertNull(FilePendingMovementStore(context).load(firstUid))
             assertEquals(listOf(income), movements.load(firstUid))
+            val corrected = income.copy(cents = 2200, date = balance.date.plusMonths(1),
+                category = MovementCategory.FOOD, revision = UUID.randomUUID().toString())
+            movements.update(firstUid, income, income)
+            assertEquals(listOf(income), movements.load(firstUid))
+            try {
+                movements.update(firstUid, income, corrected.copy(date = LocalDate.of(9999, 1, 1)))
+                fail("Firestore debe rechazar la fecha futura sin modificar el original")
+            } catch (_: MovementRejected) { }
+            movements.update(firstUid, income, corrected)
+            movements.update(firstUid, income, corrected)
+            assertEquals(listOf(corrected), movements.load(firstUid))
+            try {
+                movements.delete(firstUid, income)
+                fail("Una versión anterior no puede eliminar una corrección confirmada")
+            } catch (_: MovementChanged) { }
+            val restored = income.copy(revision = UUID.randomUUID().toString())
+            movements.update(firstUid, corrected, restored)
+            try {
+                movements.update(firstUid, income, corrected)
+                fail("Restaurar los valores anteriores no restaura su revisión")
+            } catch (_: MovementChanged) { }
+            movements.delete(firstUid, restored)
+            movements.delete(firstUid, restored)
+            assertTrue(movements.load(firstUid).isEmpty())
+            try {
+                movements.create(firstUid, income)
+                fail("Un alta pendiente no puede recuperar un identificador eliminado")
+            } catch (_: MovementRejected) { }
+            try {
+                movements.update(firstUid, corrected, restored)
+                fail("Editar no puede volver a crear un movimiento eliminado")
+            } catch (_: MovementChanged) { }
+            val remaining = income.copy(id = UUID.randomUUID().toString())
+            movements.create(firstUid, remaining)
             repo.signOut()
             assertNull(repo.userId)
             try {
@@ -90,17 +126,24 @@ class FirebaseAuthRepositoryTest {
             val secondUid = checkNotNull(repo.userId)
             assertNull(cash.load(secondUid))
             assertEquals(emptyList<Movement>(), movements.load(secondUid))
-            try {
-                movements.load(firstUid)
-                fail("Otra cuenta no puede consultar los movimientos anteriores")
-            } catch (error: com.google.firebase.firestore.FirebaseFirestoreException) {
-                assertEquals(com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED, error.code)
+            val foreignOperations: List<suspend () -> Unit> = listOf(
+                { movements.load(firstUid) },
+                { movements.update(firstUid, remaining, corrected.copy(id = remaining.id)) },
+                { movements.delete(firstUid, remaining) },
+            )
+            for (operation in foreignOperations) {
+                try {
+                    operation()
+                    fail("Otra cuenta no puede acceder a los movimientos anteriores")
+                } catch (error: FirebaseFirestoreException) {
+                    assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, error.code)
+                }
             }
             try {
                 db.collection("usuarios").document(firstUid).get().await()
                 fail("Otra cuenta no puede leer el perfil anterior")
-            } catch (error: com.google.firebase.firestore.FirebaseFirestoreException) {
-                assertEquals(com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED, error.code)
+            } catch (error: FirebaseFirestoreException) {
+                assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, error.code)
             }
         } finally {
             repo.signOut()

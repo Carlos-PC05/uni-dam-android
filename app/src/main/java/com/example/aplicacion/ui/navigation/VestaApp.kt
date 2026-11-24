@@ -14,6 +14,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.*
+import androidx.navigation.toRoute
 import com.example.aplicacion.R
 import com.example.aplicacion.model.UserProfile
 import com.example.aplicacion.ui.auth.*
@@ -22,6 +23,8 @@ import com.example.aplicacion.ui.inicio.InitialBalanceViewModel
 import com.example.aplicacion.ui.ajustes.ProfileScreen
 import com.example.aplicacion.ui.movimientos.CashStatus
 import com.example.aplicacion.ui.movimientos.CashSummary
+import com.example.aplicacion.ui.movimientos.CorrectionAction
+import com.example.aplicacion.ui.movimientos.MovementCorrectionScreen
 import com.example.aplicacion.ui.movimientos.MovementFormScreen
 import com.example.aplicacion.ui.movimientos.MovementsScreen
 import com.example.aplicacion.ui.movimientos.MovementsViewModel
@@ -99,7 +102,8 @@ private fun MainNavigation(
     val icons = listOf(R.drawable.ic_home, R.drawable.ic_movements, R.drawable.ic_investments, R.drawable.ic_profile)
     val selected = when {
         entry?.destination?.hasRoute<Movements>() == true ||
-            entry?.destination?.hasRoute<NewMovement>() == true -> 1
+            entry?.destination?.hasRoute<NewMovement>() == true ||
+            entry?.destination?.hasRoute<EditMovement>() == true -> 1
         entry?.destination?.hasRoute<Investments>() == true -> 2
         entry?.destination?.hasRoute<Settings>() == true -> 3
         else -> 0
@@ -157,10 +161,18 @@ private fun MainNavigation(
             composable<Movements> { entry ->
                 val movements = cashViewModel(remember(entry) { nav.getBackStackEntry(nav.graph.id) })
                 val cashState by movements.state.collectAsStateWithLifecycle()
-                LaunchedEffect(profile.uid) { movements.load(profile.uid) }
-                MovementsScreen(cashState, movements, profile.uid) {
-                    nav.navigate(NewMovement) { launchSingleTop = true }
+                LaunchedEffect(profile.uid) {
+                    movements.state.first { !it.busy }
+                    movements.load(profile.uid)
                 }
+                MovementsScreen(
+                    cashState, movements, profile.uid,
+                    onAdd = { nav.navigate(NewMovement) { launchSingleTop = true } },
+                    onCorrect = { id ->
+                        movements.openCorrection(id)
+                        nav.navigate(EditMovement(id)) { launchSingleTop = true }
+                    },
+                )
             }
             composable<NewMovement> { entry ->
                 val movements = cashViewModel(remember(entry) { nav.getBackStackEntry(nav.graph.id) })
@@ -177,6 +189,46 @@ private fun MainNavigation(
                     } else {
                         MovementFormScreen(cashState, movements, profile.uid) {
                             if (nav.currentBackStackEntry == entry) nav.popBackStack()
+                        }
+                    }
+                }
+            }
+            composable<EditMovement> { entry ->
+                val movements = cashViewModel(remember(entry) { nav.getBackStackEntry(nav.graph.id) })
+                val cashState by movements.state.collectAsStateWithLifecycle()
+                val id = entry.toRoute<EditMovement>().id
+                val correction = cashState.correction?.takeIf { it.original.id == id }
+                LaunchedEffect(profile.uid) {
+                    if (cashState.movements == null) movements.load(profile.uid)
+                }
+                LaunchedEffect(id, cashState.movements, cashState.busy) {
+                    if (correction == null && nav.currentBackStackEntry == entry) movements.openCorrection(id)
+                }
+                fun back() {
+                    if (nav.currentBackStackEntry == entry) {
+                        movements.closeCorrection()
+                        nav.popBackStack()
+                    }
+                }
+                LaunchedEffect(correction?.action, cashState.busy, nav.currentBackStackEntry == entry) {
+                    if (correction?.action == CorrectionAction.Completed && !cashState.busy) back()
+                }
+                ScrollableContent {
+                    if (correction != null) {
+                        MovementCorrectionScreen(
+                            correction, cashState.busy, onChange = movements::changeCorrection,
+                            onSave = { movements.saveCorrection(profile.uid) },
+                            onRequestDeletion = movements::requestDeletion,
+                            onDelete = { movements.confirmDeletion(profile.uid) },
+                            onBack = ::back,
+                        )
+                    } else {
+                        Column(Modifier.padding(24.dp)) {
+                            CashStatus(cashState) { movements.load(profile.uid) }
+                            if (cashState.movements?.none { it.id == id } == true) {
+                                Text("El movimiento ya no está disponible.")
+                            }
+                            TextButton(onClick = ::back) { Text("Volver a Movimientos") }
                         }
                     }
                 }

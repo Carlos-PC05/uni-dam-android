@@ -12,6 +12,7 @@ import com.example.aplicacion.model.UserProfile
 import com.example.aplicacion.ui.navigation.VestaApp
 import com.example.aplicacion.data.cash.MovementRepository
 import com.example.aplicacion.model.Movement
+import com.example.aplicacion.model.MovementCategory
 import com.example.aplicacion.ui.movimientos.MovementsViewModel
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -109,11 +110,26 @@ class AuthScreenTest {
             override suspend fun create(uid: String, balance: InitialBalance): InitialBalance =
                 error("El recorrido solo consulta el saldo")
         }
+        var aliceMovement: Movement? = null
         val movementRepository = object : MovementRepository {
-            override suspend fun load(uid: String): List<Movement> = emptyList()
+            override suspend fun load(uid: String): List<Movement> =
+                if (uid == "alice") listOfNotNull(aliceMovement) else emptyList()
 
             override suspend fun create(uid: String, movement: Movement) =
                 error("El recorrido solo consulta los movimientos")
+
+            override suspend fun update(uid: String, original: Movement, replacement: Movement) {
+                assertEquals("alice", uid)
+                assertEquals(aliceMovement, original)
+                assertEquals(original.id, replacement.id)
+                aliceMovement = replacement
+            }
+
+            override suspend fun delete(uid: String, movement: Movement) {
+                assertEquals("alice", uid)
+                assertEquals(aliceMovement, movement)
+                aliceMovement = null
+            }
         }
         val pendingStore = object : PendingMovementStore {
             override suspend fun load(uid: String): Movement? = null
@@ -135,9 +151,27 @@ class AuthScreenTest {
         }
         compose.onNodeWithText("Hola, Alicia").assertExists()
         compose.onNodeWithText("Configura tu saldo inicial").assertExists()
-        compose.runOnIdle { aliceBalance = InitialBalance(-1250, LocalDate.of(2024, 1, 1)) }
+        compose.runOnIdle {
+            aliceBalance = InitialBalance(-1250, LocalDate.of(2024, 1, 1))
+            aliceMovement = Movement("alice-income", 500, LocalDate.now(), MovementCategory.INCOME, "Abono")
+        }
         compose.onNodeWithText("Movimientos").performClick()
-        compose.onNodeWithText("No hay movimientos en este mes.").assertExists()
+        compose.onNodeWithText("Categoría: Todas").performClick()
+        compose.onNodeWithText("Comida").performClick()
+        compose.onNodeWithText("No hay movimientos para estos filtros.").assertExists()
+        compose.onNodeWithText("Categoría: Comida").performClick()
+        compose.onNodeWithText("Ingreso").performClick()
+        compose.onNodeWithText("Editar movimiento").performClick()
+        compose.onNode(hasSetTextAction() and hasText("5.00")).performTextReplacement("10,50")
+        compose.onNodeWithText("Guardar cambios").performScrollTo().performClick()
+        compose.onNodeWithText("+10,50", substring = true).assertExists()
+        compose.onNodeWithText("Editar movimiento").performClick()
+        compose.onNodeWithText("Eliminar movimiento").performScrollTo().performClick()
+        compose.onNodeWithText("Cancelar").performClick()
+        compose.runOnIdle { assertEquals(1050L, aliceMovement?.cents) }
+        compose.onNodeWithText("Eliminar movimiento").performScrollTo().performClick()
+        compose.onNodeWithText("Eliminar", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("No hay movimientos para estos filtros.").assertExists()
         compose.onNodeWithText("Inicio").performClick()
         compose.onNodeWithText("-12,50", substring = true).assertExists()
         compose.onNodeWithText("Configura tu saldo inicial").assertDoesNotExist()

@@ -10,3 +10,4 @@ import kotlinx.serialization.Serializable
 @Serializable object Investments
 @Serializable object Settings
 @Serializable object NewMovement
+@Serializable data class EditMovement(val id: String)
