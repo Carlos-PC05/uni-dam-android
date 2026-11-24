@@ -24,8 +24,6 @@ perfil remoto; si falla ese paso, se puede reintentar sin crear otra cuenta.
 Al reabrir, un perfil incompleto vuelve al formulario de finalización. Los
 formularios conservan sus datos ante errores; las contraseñas solo viven en memoria
 y se descartan al abandonar la pantalla o recrearla. No se ofrece modo offline.
-Movimientos e Inversiones están identificados como pendientes; la recuperación de
-contraseña pertenece al siguiente ticket.
 
 ### Preparar Firebase remoto
 
@@ -122,6 +120,44 @@ efectivo confirmado en euros.
 5. Ejecuta `./gradlew :app:testDebugUnitTest` para comprobar el formulario y
    `npm --prefix firebase-tests test` para verificar la privacidad y unicidad
    con las reglas locales.
+
+## Consultar y corregir movimientos
+
+Movimientos combina el mes y la categoría seleccionados para filtrar la lista.
+Inicio usa esa misma lista de movimientos confirmados, incluida la de otros
+meses, para calcular el efectivo. El resumen y las barras usan todos los ingresos
+y gastos del mes seleccionado.
+
+Al abrir «Editar movimiento», la ruta pasa el identificador al ViewModel. Este
+carga el formulario con el importe, la fecha, la categoría y la nota del registro.
+Firestore sustituye los datos bajo el mismo identificador o los elimina tras la
+confirmación. Cada edición tiene una revisión propia, que permite reconocer un
+reintento y detectar cambios de otro dispositivo aunque los valores coincidan.
+Al eliminar, la transacción también guarda una marca con el
+identificador, sin datos financieros, que impide que un alta pendiente lo reactive.
+La interfaz conserva los valores del formulario durante la espera y ante un error.
+Si se pierde la confirmación, el reintento envía los mismos cambios.
+El efectivo, el resumen y las barras cambian cuando Firestore confirma la operación.
+
+### Demostración de una corrección
+
+1. Usa una cuenta de prueba y un saldo inicial de 1.000 € con fecha anterior al mes
+   pasado. Registra un ingreso de 500 € y un gasto de 200 € en Comida, ambos en el
+   mes pasado. En Inicio, selecciona ese mes y comprueba efectivo de 1.300 € y
+   flujo de caja de +300 €.
+2. En Movimientos, selecciona el mes pasado y la categoría Ingreso. Edita el
+   resultado y cambia el importe a 100,50 €, la categoría a Vivienda y la fecha a
+   este mes. Tras guardar, el filtro de ingresos del mes pasado queda vacío. En el
+   mes actual, selecciona Vivienda para encontrar el movimiento corregido.
+3. En Inicio, comprueba que el efectivo es 699,50 €. El flujo es −200 € el mes
+   pasado y −100,50 € este mes. Las barras muestran los gastos de cada mes.
+4. Abre el movimiento de Vivienda, pulsa «Eliminar movimiento» y cancela. Vuelve a
+   pulsar «Eliminar movimiento» y confirma. El efectivo pasa a 800 € y las barras
+   del mes actual quedan a cero.
+5. Durante una edición, prueba `0`, `12,345` y una fecha anterior al saldo. Luego
+   introduce valores válidos, desconecta la red y guarda. Tras el error, vuelve a
+   conectar y reintenta con el mismo formulario. Ejecuta `npm --prefix
+   firebase-tests test` para comprobar también el aislamiento de dos cuentas.
 
 ## Integración continua
 

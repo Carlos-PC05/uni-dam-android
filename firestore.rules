@@ -12,19 +12,42 @@ service cloud.firestore {
         && request.resource.data.nombreCompleto.matches('.*\\S.*');
     }
     match /usuarios/{uid}/movimientos/{movementId} {
+      function deletionMarker() {
+        return /databases/$(database)/documents/usuarios/$(uid)/movimientosEliminados/$(movementId);
+      }
+      function validMovement() {
+        let data = request.resource.data;
+        return !exists(deletionMarker())
+          && movementId.matches('[a-f0-9-]{36}')
+          && data.centimos is int && data.centimos > 0
+          && data.dia is int
+          && data.dia >= get(/databases/$(database)/documents/usuarios/$(uid)/efectivo/saldoInicial).data.dia
+          && data.dia <= 2932896
+          && data.dia * 86400000 <= (request.time + duration.value(14, 'h')).toMillis()
+          && data.categoria in ['INCOME', 'LEISURE', 'HOUSING', 'FOOD', 'TRANSPORT', 'HEALTH', 'OTHER']
+          && data.nota is string && data.nota.size() <= 500;
+      }
       allow read: if request.auth != null && request.auth.uid == uid;
+      allow delete: if request.auth != null && request.auth.uid == uid && existsAfter(deletionMarker());
       allow create: if request.auth != null && request.auth.uid == uid
-        && movementId.matches('[a-f0-9-]{36}')
         && request.resource.data.keys().hasOnly(['centimos', 'dia', 'categoria', 'nota'])
-        && request.resource.data.centimos is int
-        && request.resource.data.centimos > 0
-        && request.resource.data.dia is int
-        && request.resource.data.dia >= get(/databases/$(database)/documents/usuarios/$(uid)/efectivo/saldoInicial).data.dia
-        && request.resource.data.dia <= 2932896
-        && request.resource.data.dia * 86400000 <= (request.time + duration.value(14, 'h')).toMillis()
-        && request.resource.data.categoria in ['INCOME', 'LEISURE', 'HOUSING', 'FOOD', 'TRANSPORT', 'HEALTH', 'OTHER']
-        && request.resource.data.nota is string
-        && request.resource.data.nota.size() <= 500;
+        && validMovement();
+      allow update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['centimos', 'dia', 'categoria', 'nota', 'revision'])
+        && request.resource.data.revision is string
+        && request.resource.data.revision.matches('[a-f0-9-]{36}')
+        && request.resource.data.revision != resource.data.get('revision', '')
+        && validMovement();
+    }
+    // Reserva el identificador eliminado para que un reintento de alta no lo reactive.
+    match /usuarios/{uid}/movimientosEliminados/{movementId} {
+      function movement() {
+        return /databases/$(database)/documents/usuarios/$(uid)/movimientos/$(movementId);
+      }
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['eliminado'])
+        && request.resource.data.eliminado == true
+        && exists(movement()) && !existsAfter(movement());
     }
     match /usuarios/{uid}/efectivo/saldoInicial {
       allow get: if request.auth != null && request.auth.uid == uid;

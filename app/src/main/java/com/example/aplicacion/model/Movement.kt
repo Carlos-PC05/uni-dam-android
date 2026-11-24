@@ -15,6 +15,7 @@ data class Movement(
     val date: LocalDate,
     val category: MovementCategory,
     val note: String,
+    val revision: String? = null,
 )
 
 data class CashFlow(val income: BigInteger, val expenses: BigInteger) {
